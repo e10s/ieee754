@@ -1,0 +1,15 @@
+.dub
+docs.json
+__dummy.html
+docs/
+/ieee754
+ieee754.so
+ieee754.dylib
+ieee754.dll
+ieee754.a
+ieee754.lib
+ieee754-test-*
+*.exe
+*.o
+*.obj
+*.lst

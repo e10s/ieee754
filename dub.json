@@ -1,0 +1,9 @@
+{
+    "authors": [
+        "Kazuya Takahashi"
+    ],
+    "copyright": "Copyright (C) 2019, Kazuya Takahashi",
+    "description": "Implementation of floating-point arithmetic, based on IEEE 754.",
+    "license": "MIT",
+    "name": "ieee754"
+}
