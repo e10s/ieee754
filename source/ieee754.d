@@ -22,6 +22,11 @@ struct Binary32
                 exponentBits, fractionBits);
         return format!fmt(sign, exponent, fraction);
     }
+
+    bool isNaN() const pure nothrow @nogc @safe @property
+    {
+        return exponent == 0xFF && fraction;
+    }
 }
 
 unittest
@@ -31,4 +36,8 @@ unittest
     f.exponent = 0b01111100;
     f.fraction = 0b010_0000_0000_0000_0000_0000;
     assert(f.value == -.15625);
+    assert(!f.isNaN);
+
+    f.value = float.nan;
+    assert(f.isNaN);
 }
