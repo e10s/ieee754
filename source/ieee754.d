@@ -37,6 +37,11 @@ struct Binary32
     {
         return exponent == 0xFF && fraction;
     }
+
+    bool isNormal() const pure nothrow @nogc @safe @property
+    {
+        return exponent && exponent != 0xFF;
+    }
 }
 
 unittest
@@ -49,11 +54,20 @@ unittest
     assert(f.isFinite);
     assert(!f.isInfinity);
     assert(!f.isNaN);
+    assert(f.isNormal);
+
+    f.exponent = 0;
+    f.fraction = 1;
+    assert(!f.isNormal);
+
+    f.value = 0;
+    assert(!f.isNormal);
 
     f.value = float.nan;
     assert(!f.isFinite);
     assert(!f.isInfinity);
     assert(f.isNaN);
+    assert(!f.isNormal);
 
     f.value = float.infinity;
     assert(!f.isFinite);
@@ -61,4 +75,5 @@ unittest
     f.sign = 1;
     assert(f.isInfinity);
     assert(!f.isNaN);
+    assert(!f.isNormal);
 }
