@@ -23,6 +23,11 @@ struct Binary32
         return format!fmt(sign, exponent, fraction);
     }
 
+    bool isInfinity() const pure nothrow @nogc @safe @property
+    {
+        return exponent == 0xFF && !fraction;
+    }
+
     bool isNaN() const pure nothrow @nogc @safe @property
     {
         return exponent == 0xFF && fraction;
@@ -36,8 +41,16 @@ unittest
     f.exponent = 0b01111100;
     f.fraction = 0b010_0000_0000_0000_0000_0000;
     assert(f.value == -.15625);
+    assert(!f.isInfinity);
     assert(!f.isNaN);
 
     f.value = float.nan;
+    assert(!f.isInfinity);
     assert(f.isNaN);
+
+    f.value = float.infinity;
+    assert(f.isInfinity);
+    f.sign = 1;
+    assert(f.isInfinity);
+    assert(!f.isNaN);
 }
