@@ -43,6 +43,27 @@ struct Binary32
         return exponent && exponent != 0xFF;
     }
 
+    bool isPowerOf2() const pure nothrow @nogc @safe @property
+    {
+        if (sign)
+        {
+            return false;
+        }
+
+        if (isNormal)
+        {
+            return !fraction;
+        }
+        else if (isSubnormal)
+        {
+            import std.math : isPowerOf2;
+
+            return isPowerOf2(fraction);
+        }
+
+        return false;
+    }
+
     bool isSubnormal() const pure nothrow @nogc @safe @property
     {
         return !exponent && fraction;
@@ -60,15 +81,22 @@ unittest
     assert(!f.isInfinity);
     assert(!f.isNaN);
     assert(f.isNormal);
+    assert(!f.isPowerOf2);
     assert(!f.isSubnormal);
 
     f.exponent = 0;
     f.fraction = 1;
     assert(!f.isNormal);
+    assert(!f.isPowerOf2);
     assert(f.isSubnormal);
+    f.sign = 0;
+    assert(f.isPowerOf2);
+    f.fraction = 3;
+    assert(!f.isPowerOf2);
 
     f.value = 0;
     assert(!f.isNormal);
+    assert(!f.isPowerOf2);
     assert(!f.isSubnormal);
 
     f.value = float.nan;
@@ -76,11 +104,13 @@ unittest
     assert(!f.isInfinity);
     assert(f.isNaN);
     assert(!f.isNormal);
+    assert(!f.isPowerOf2);
     assert(!f.isSubnormal);
 
     f.value = float.infinity;
     assert(!f.isFinite);
     assert(f.isInfinity);
+    assert(!f.isPowerOf2);
     f.sign = 1;
     assert(f.isInfinity);
     assert(!f.isNaN);
