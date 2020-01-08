@@ -60,6 +60,21 @@ struct Binary32
     enum int max_exp = 1 + bias;
     enum int min_exp = 2 - bias;
 
+    static Binary32 min_normal() pure nothrow @nogc @safe @property
+    out (r)
+    {
+        assert(r.isNormal);
+    }
+    do
+    {
+        // 2^(min_exp-1)
+        Binary32 minNormal;
+        minNormal.sign = 0;
+        minNormal.exponent = 1;
+        minNormal.fraction = 0;
+        return minNormal;
+    }
+
     static Binary32 zero() pure nothrow @nogc @safe @property
     out (r)
     {
