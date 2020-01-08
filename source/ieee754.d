@@ -60,6 +60,21 @@ struct Binary32
     enum int max_exp = 1 + bias;
     enum int min_exp = 2 - bias;
 
+    static Binary32 max() pure nothrow @nogc @safe @property
+    out (r)
+    {
+        assert(r.isFinite);
+    }
+    do
+    {
+        // (1-2^-mant_dig) * 2^max_exp
+        Binary32 maxFinite;
+        maxFinite.sign = 0;
+        maxFinite.exponent = 0xFE;
+        maxFinite.fraction = (1U << fractionBits) - 1;
+        return maxFinite;
+    }
+
     static Binary32 min_normal() pure nothrow @nogc @safe @property
     out (r)
     {
