@@ -44,6 +44,16 @@ struct Binary32
         return nan;
     }
 
+    static Binary32 epsilon() pure nothrow @nogc @safe @property
+    {
+        // 2^-fractionBits
+        Binary32 eps;
+        eps.sign = 0;
+        eps.exponent = bias - fractionBits;
+        eps.fraction = 0;
+        return eps;
+    }
+
     enum int mant_dig = fractionBits + 1;
 
     static Binary32 zero() pure nothrow @nogc @safe @property
