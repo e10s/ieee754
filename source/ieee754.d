@@ -57,6 +57,8 @@ struct Binary32
     }
 
     enum int mant_dig = fractionBits + 1;
+    enum int max_exp = 1 + bias;
+    enum int min_exp = 2 - bias;
 
     static Binary32 zero() pure nothrow @nogc @safe @property
     out (r)
