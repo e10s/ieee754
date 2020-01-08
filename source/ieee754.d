@@ -56,6 +56,20 @@ struct Binary32
         return zero;
     }
 
+    Binary32 opUnary(string op)() const if (op == "+" || op == "-")
+    {
+        static if (op == "+")
+        {
+            return this;
+        }
+        else
+        {
+            Binary32 r = this;
+            r.sign = !r.sign;
+            return r;
+        }
+    }
+
     Binary32 opBinary(string op)(Binary32 rhs) const if (op == "*")
     {
         immutable lhs = this;
@@ -317,6 +331,17 @@ struct Binary32
     {
         return !exponent && !fraction;
     }
+}
+
+unittest
+{
+    Binary32 a = {value: 3.14};
+    Binary32 b = {value: -3.14};
+
+    assert((+a).value == a.value);
+    assert((+b).value == b.value);
+    assert((-a).value == b.value);
+    assert((-b).value == a.value);
 }
 
 unittest
