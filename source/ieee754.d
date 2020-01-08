@@ -44,6 +44,8 @@ struct Binary32
         return nan;
     }
 
+    enum int mant_dig = fractionBits + 1;
+
     static Binary32 zero() pure nothrow @nogc @safe @property
     out (r)
     {
