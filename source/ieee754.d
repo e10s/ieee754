@@ -44,6 +44,8 @@ struct Binary32
         return nan;
     }
 
+    enum int dig = 6; // floor(fractionBits * log_10(2))
+
     static Binary32 epsilon() pure nothrow @nogc @safe @property
     {
         // 2^-fractionBits
