@@ -14,6 +14,8 @@ struct Binary32
 
     enum uint bias = 127, fractionBits = 23, exponentBits = 8, signBits = 1;
 
+    alias init = nan;
+
     static Binary32 infinity() pure nothrow @nogc @safe @property
     out (r)
     {
