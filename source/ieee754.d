@@ -42,11 +42,7 @@ struct Binary32
     }
     do
     {
-        Binary32 inf;
-        inf.sign = 0;
-        inf.exponent = 0xFF;
-        inf.fraction = 0;
-        return inf;
+        return Binary32(0, 0xFF, 0);
     }
 
     /// NaN value
@@ -57,11 +53,7 @@ struct Binary32
     }
     do
     {
-        Binary32 nan;
-        nan.sign = 0;
-        nan.exponent = 0xFF;
-        nan.fraction = 1 << fractionBits - 1;
-        return nan;
+        return Binary32(0, 0xFF, (1U << fractionBits) - 1);
     }
 
     /// Number of decimal digits of precision
@@ -71,11 +63,7 @@ struct Binary32
     static Binary32 epsilon() pure nothrow @nogc @safe @property
     {
         // 2^-fractionBits
-        Binary32 eps;
-        eps.sign = 0;
-        eps.exponent = bias - fractionBits;
-        eps.fraction = 0;
-        return eps;
+        return Binary32(0, bias - fractionBits, 0);
     }
 
     /// Number of bits in mantissa
@@ -96,11 +84,7 @@ struct Binary32
     do
     {
         // (1-2^-mant_dig) * 2^max_exp
-        Binary32 maxFinite;
-        maxFinite.sign = 0;
-        maxFinite.exponent = 0xFE;
-        maxFinite.fraction = (1U << fractionBits) - 1;
-        return maxFinite;
+        return Binary32(0, 0xFE, (1U << fractionBits) - 1);
     }
 
     /// Smallest representable normalized value that's not 0
@@ -112,11 +96,7 @@ struct Binary32
     do
     {
         // 2^(min_exp-1)
-        Binary32 minNormal;
-        minNormal.sign = 0;
-        minNormal.exponent = 1;
-        minNormal.fraction = 0;
-        return minNormal;
+        return Binary32(0, 1, 0);
     }
 
     /// Positive 0 value
@@ -127,11 +107,7 @@ struct Binary32
     }
     do
     {
-        Binary32 zero;
-        zero.sign = 0;
-        zero.exponent = 0;
-        zero.fraction = 0;
-        return zero;
+        return Binary32(0, 0, 0);
     }
 
     ///
