@@ -21,7 +21,7 @@ struct Binary32
     }
 
     ///
-    this(bool sign, ubyte exponent, uint fraction)
+    this(bool sign, ubyte exponent, uint fraction) pure nothrow @nogc @safe
     {
         this.sign = sign;
         this.exponent = exponent;
@@ -356,6 +356,16 @@ struct Binary32
         return format!fmt(sign, exponent, fraction);
     }
 
+    //---------------------------
+
+    ///
+    Binary32 fabs() const pure nothrow @nogc @safe @property
+    {
+        return sign ? Binary32(0, exponent, fraction) : this;
+    }
+
+    //---------------------------
+
     ///
     bool isFinite() const pure nothrow @nogc @safe @property
     {
@@ -485,6 +495,7 @@ unittest
 {
     auto f = Binary32(1, 0b01111100, 0b010_0000_0000_0000_0000_0000);
     assert(f.value == -.15625);
+    assert(f.fabs == -f);
     assert(f.isFinite);
     assert(!f.isInfinity);
     assert(!f.isNaN);
@@ -511,6 +522,7 @@ unittest
     assert(!f.isSubnormal);
 
     f = Binary32(float.nan);
+    assert(f.fabs.isNaN);
     assert(!f.isFinite);
     assert(!f.isInfinity);
     assert(f.isNaN);
@@ -519,10 +531,12 @@ unittest
     assert(!f.isSubnormal);
 
     f = Binary32(float.infinity);
+    assert(f.fabs == f);
     assert(!f.isFinite);
     assert(f.isInfinity);
     assert(!f.isPowerOf2);
     f.sign = 1;
+    assert(f.fabs == -f);
     assert(f.isInfinity);
     assert(!f.isNaN);
     assert(!f.isNormal);
