@@ -14,6 +14,19 @@ struct Binary32
         mixin(bitfields!(uint, "fraction", fractionBits, ubyte, "exponent",
                 exponentBits, bool, "sign", signBits));
     }
+    ///
+    this(float value)
+    {
+        this.value = value;
+    }
+
+    ///
+    this(bool sign, ubyte exponent, uint fraction)
+    {
+        this.sign = sign;
+        this.exponent = exponent;
+        this.fraction = fraction;
+    }
 
     ///
     enum uint bias = 127, fractionBits = 23, exponentBits = 8, signBits = 1;
@@ -410,8 +423,8 @@ struct Binary32
 
 unittest
 {
-    Binary32 a = {value: 3.14};
-    Binary32 b = {value: -3.14};
+    auto a = Binary32(3.14);
+    auto b = Binary32(-3.14);
 
     assert((+a).value == a.value);
     assert((+b).value == b.value);
@@ -432,7 +445,7 @@ unittest
     }
 
     auto testcases = Mt19937().map!(a => FloatContainer(a).f)
-        .map!(a => { Binary32 b = {value: a}; return b; }())
+        .map!(a => Binary32(a))
         .slide(2);
 
     foreach (operands; testcases.take(1000))
@@ -442,7 +455,7 @@ unittest
         immutable rhs = operands.front;
 
         immutable prod = lhs * rhs;
-        immutable Binary32 prodRef = {value: lhs.value * rhs.value};
+        immutable prodRef = Binary32(lhs.value * rhs.value);
 
         if (prod.isNaN)
         {
@@ -461,8 +474,7 @@ unittest
 unittest
 {
     assert((Binary32.zero * Binary32.infinity).isNaN);
-    Binary32 f;
-    f.value = -11.2;
+    auto f = Binary32(-11.2);
     assert((Binary32.zero * f).isZero);
     assert((f * Binary32.infinity).isInfinity);
 }
@@ -470,18 +482,14 @@ unittest
 // Overflow after rounding
 unittest
 {
-    Binary32 f, g;
-    f.value = 0x1.46f6d8p+125;
-    g.value = 0x1.90e02ap+2;
+    auto f = Binary32(0x1.46f6d8p+125);
+    auto g = Binary32(0x1.90e02ap+2);
     assert((f * g).isInfinity);
 }
 
 unittest
 {
-    Binary32 f;
-    f.sign = 1;
-    f.exponent = 0b01111100;
-    f.fraction = 0b010_0000_0000_0000_0000_0000;
+    auto f = Binary32(1, 0b01111100, 0b010_0000_0000_0000_0000_0000);
     assert(f.value == -.15625);
     assert(f.isFinite);
     assert(!f.isInfinity);
@@ -500,15 +508,15 @@ unittest
     f.fraction = 3;
     assert(!f.isPowerOf2);
 
-    f.value = 128;
+    f = Binary32(128);
     assert(f.isPowerOf2);
 
-    f.value = 0;
+    f = Binary32(0);
     assert(!f.isNormal);
     assert(!f.isPowerOf2);
     assert(!f.isSubnormal);
 
-    f.value = float.nan;
+    f = Binary32(float.nan);
     assert(!f.isFinite);
     assert(!f.isInfinity);
     assert(f.isNaN);
@@ -516,7 +524,7 @@ unittest
     assert(!f.isPowerOf2);
     assert(!f.isSubnormal);
 
-    f.value = float.infinity;
+    f = Binary32(float.infinity);
     assert(!f.isFinite);
     assert(f.isInfinity);
     assert(!f.isPowerOf2);
