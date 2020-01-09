@@ -3,19 +3,25 @@ module ieee754;
 /// Single precision FP
 struct Binary32
 {
-    import std.bitmanip : bitfields;
-
-    // borrowed from std_bitmanip.FloatRep
+    // borrowed from std.bitmanip.FloatRep
+    ///
     union
     {
         float value;
-        mixin(bitfields!(uint, "fraction", 23, ubyte, "exponent", 8, bool, "sign", 1));
+
+        import std.bitmanip : bitfields;
+
+        mixin(bitfields!(uint, "fraction", fractionBits, ubyte, "exponent",
+                exponentBits, bool, "sign", signBits));
     }
 
+    ///
     enum uint bias = 127, fractionBits = 23, exponentBits = 8, signBits = 1;
 
+    /// Initializer (NaN)
     alias init = nan;
 
+    /// Positive infinity value
     static Binary32 infinity() pure nothrow @nogc @safe @property
     out (r)
     {
@@ -30,6 +36,7 @@ struct Binary32
         return inf;
     }
 
+    /// NaN value
     static Binary32 nan() pure nothrow @nogc @safe @property
     out (r)
     {
@@ -44,8 +51,10 @@ struct Binary32
         return nan;
     }
 
+    /// Number of decimal digits of precision
     enum int dig = 6; // floor(fractionBits * log_10(2))
 
+    /// Smallest increment to the value 1
     static Binary32 epsilon() pure nothrow @nogc @safe @property
     {
         // 2^-fractionBits
@@ -56,10 +65,16 @@ struct Binary32
         return eps;
     }
 
+    /// Number of bits in mantissa
     enum int mant_dig = fractionBits + 1;
+
+    /// Maximum int value such that 2<sup>max_exp-1</sup> is representable
     enum int max_exp = 1 + bias;
+
+    /// Minimum int value such that 2<sup>min_exp-1</sup> is representable as a normalized value
     enum int min_exp = 2 - bias;
 
+    /// Largest representable value that's not infinity
     static Binary32 max() pure nothrow @nogc @safe @property
     out (r)
     {
@@ -75,6 +90,7 @@ struct Binary32
         return maxFinite;
     }
 
+    /// Smallest representable normalized value that's not 0
     static Binary32 min_normal() pure nothrow @nogc @safe @property
     out (r)
     {
@@ -90,6 +106,7 @@ struct Binary32
         return minNormal;
     }
 
+    /// Positive 0 value
     static Binary32 zero() pure nothrow @nogc @safe @property
     out (r)
     {
@@ -104,6 +121,7 @@ struct Binary32
         return zero;
     }
 
+    ///
     Binary32 opUnary(string op)() const if (op == "+" || op == "-")
     {
         static if (op == "+")
@@ -118,6 +136,7 @@ struct Binary32
         }
     }
 
+    ///
     Binary32 opBinary(string op)(Binary32 rhs) const if (op == "*")
     {
         immutable lhs = this;
@@ -320,6 +339,7 @@ struct Binary32
         return ret;
     }
 
+    ///
     string toString() const pure @safe
     {
         import std.format : format;
@@ -329,26 +349,31 @@ struct Binary32
         return format!fmt(sign, exponent, fraction);
     }
 
+    ///
     bool isFinite() const pure nothrow @nogc @safe @property
     {
         return exponent != 0xFF;
     }
 
+    ///
     bool isInfinity() const pure nothrow @nogc @safe @property
     {
         return exponent == 0xFF && !fraction;
     }
 
+    ///
     bool isNaN() const pure nothrow @nogc @safe @property
     {
         return exponent == 0xFF && fraction;
     }
 
+    ///
     bool isNormal() const pure nothrow @nogc @safe @property
     {
         return exponent && exponent != 0xFF;
     }
 
+    ///
     bool isPowerOf2() const pure nothrow @nogc @safe @property
     {
         if (sign)
@@ -362,19 +387,21 @@ struct Binary32
         }
         else if (isSubnormal)
         {
-            import std.math : isPowerOf2;
+            import core.bitop : popcnt;
 
-            return isPowerOf2(fraction);
+            return popcnt(fraction) == 1;
         }
 
         return false;
     }
 
+    ///
     bool isSubnormal() const pure nothrow @nogc @safe @property
     {
         return !exponent && fraction;
     }
 
+    ///
     bool isZero() const pure nothrow @nogc @safe @property
     {
         return !exponent && !fraction;
@@ -472,6 +499,9 @@ unittest
     assert(f.isPowerOf2);
     f.fraction = 3;
     assert(!f.isPowerOf2);
+
+    f.value = 128;
+    assert(f.isPowerOf2);
 
     f.value = 0;
     assert(!f.isNormal);
