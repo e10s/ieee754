@@ -165,9 +165,7 @@ struct Binary32
 
         if ((lhs.isZero && rhs.isInfinity) || (lhs.isInfinity && rhs.isZero))
         {
-            auto NaN = nan;
-            NaN.sign = 1; // ???
-            return NaN;
+            return -nan; // Why -???
         }
 
         immutable prodSign = lhs.sign ^ rhs.sign;
@@ -345,11 +343,7 @@ struct Binary32
         assert(prod.exponent < 0xFF);
         assert(prod.exponent > 0);
 
-        Binary32 ret;
-        ret.sign = prodSign;
-        ret.exponent = prod.underflow ? 0 : cast(ubyte) prod.exponent;
-        ret.fraction = prod.fractionPart;
-        return ret;
+        return Binary32(prodSign, prod.underflow ? 0 : cast(ubyte) prod.exponent, prod.fractionPart);
     }
 
     ///
