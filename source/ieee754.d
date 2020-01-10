@@ -125,6 +125,238 @@ struct Binary32
         }
     }
 
+    private struct Rounder // TODO: use this in opMul
+    {
+        bool sign;
+        int exponent;
+        uint mantissa; // [padding][reserved for carry: 1][integer: 1].[fraction: fractionBits][GRS: 3]
+
+        // param mantissa: [padding][reserved for carry: 1][integer: 1].[fraction: fractionBits][GRS: 3]
+        this(bool sign, int exponent, uint mantissa)
+        {
+            this.sign = sign;
+
+            immutable integer = mantissa >>> (fractionBits + 3);
+
+            // Normalize temporarily
+            if (integer > 1)
+            {
+                shiftMantissaToLeftBy1(exponent, mantissa);
+            }
+            else if (!integer)
+            {
+                enum integerBit = 1U << (fractionBits + 3);
+
+                foreach (i; 0 .. fractionBits + 3)
+                {
+                    exponent--;
+                    mantissa <<= 1;
+
+                    if (mantissa & integerBit)
+                    {
+                        break;
+                    }
+                }
+            }
+
+            // Subnormalize if needed
+            if (exponent < 1)
+            {
+                // Make 0.xxxx * 2^1
+                immutable shift = 1 - exponent;
+                foreach (_; 0 .. shift)
+                {
+                    shiftMantissaToLeftBy1(exponent, mantissa);
+                }
+                assert(exponent == 1);
+            }
+
+            this.exponent = exponent;
+            this.mantissa = mantissa;
+        }
+
+        void shiftMantissaToLeftBy1(ref int exp, ref uint mant)
+        {
+            immutable stickyBit = mant & 1;
+            exp++;
+            mant >>>= 1;
+            mant |= stickyBit;
+        }
+
+        uint integerPart() const pure nothrow @nogc @safe @property
+        {
+            return mantissa >>> (fractionBits + 3);
+        }
+
+        uint fractionPart() const pure nothrow @nogc @safe @property
+        {
+            enum fracMask = (1 << fractionBits) - 1;
+            return (mantissa >>> 3) & fracMask;
+        }
+
+        void round() // round to nearest even (RN)
+        {
+            immutable ulp_r_s = mantissa & 0b1011;
+            immutable g = mantissa & 0b100;
+            immutable roundUp = g && ulp_r_s; // something magic
+            mantissa >>>= 3;
+            mantissa += roundUp;
+            mantissa <<= 3;
+
+            if (integerPart > 1)
+            {
+                assert(integerPart == 0b10 || integerPart == 0b11);
+                shiftMantissaToLeftBy1(exponent, mantissa);
+            }
+        }
+
+        bool overflow() const pure nothrow @nogc @safe @property
+        {
+            return exponent > 0xFE;
+        }
+
+        bool underflow() const pure nothrow @nogc @safe @property
+        {
+            return exponent <= 1 && !integerPart;
+        }
+
+        Binary32 result() const pure nothrow @nogc @safe @property
+        {
+            if (overflow)
+            {
+                return sign ? -infinity : infinity;
+            }
+            assert(exponent < 0xFF);
+            assert(exponent > 0);
+
+            return Binary32(sign, underflow ? 0 : cast(ubyte) exponent, fractionPart);
+        }
+
+        string toString() const pure @safe
+        {
+            import std.format : format;
+
+            immutable fmt = format!"exp: %%0%sb, int: %%0%sb, frac: %%0%sb, grs: %%0%sb"(exponentBits,
+                    2, fractionBits, 3);
+            return format!fmt(exponent, integerPart, fractionPart, mantissa & 0b111);
+        }
+    }
+
+    ///
+    Binary32 opBinary(string op)(Binary32 rhs) const if (op == "+" || op == "-")
+    {
+        immutable lhs = this;
+        if (op == "-")
+        {
+            rhs.sign = !rhs.sign;
+        }
+
+        if (lhs.isNaN)
+        {
+            return lhs;
+        }
+
+        if (rhs.isNaN)
+        {
+            return rhs;
+        }
+
+        if (lhs.isInfinity && rhs.isInfinity)
+        {
+            if (lhs.sign == rhs.sign)
+            {
+                return lhs.sign ? -infinity : infinity;
+            }
+            return -nan; // Why -???
+        }
+
+        if (lhs.isInfinity)
+        {
+            return lhs;
+        }
+
+        if (rhs.isInfinity)
+        {
+            return rhs;
+        }
+
+        if (lhs.isZero && rhs.isZero)
+        {
+            return lhs.sign && rhs.sign ? -zero : zero;
+        }
+
+        if (lhs.isZero)
+        {
+            return rhs;
+        }
+
+        if (rhs.isZero)
+        {
+            return lhs;
+        }
+
+        immutable lhsMagnitude = (lhs.exponent << fractionBits) | lhs.fraction;
+        immutable rhsMagnitude = (rhs.exponent << fractionBits) | rhs.fraction;
+
+        immutable larger = lhsMagnitude > rhsMagnitude ? lhs : rhs;
+        immutable smaller = larger == lhs ? rhs : lhs;
+
+        int largerExponent = larger.exponent;
+        int smallerExponent = smaller.exponent;
+
+        // [padding][integer: 1].[fraction: fractionBits][GRS: 3]
+        uint largerMantissa, smallerMantissa;
+
+        enum implicitLeadingBit = 1U << fractionBits;
+        if (larger.isNormal)
+        {
+            largerMantissa = (implicitLeadingBit | larger.fraction) << 3;
+        }
+        else
+        {
+            largerExponent = 1;
+            largerMantissa = larger.fraction << 3;
+        }
+
+        if (smaller.isNormal)
+        {
+            smallerMantissa = (implicitLeadingBit | smaller.fraction) << 3;
+        }
+        else
+        {
+            smallerExponent = 1;
+            smallerMantissa = smaller.fraction << 3;
+        }
+        assert(largerExponent >= smallerExponent);
+
+        // preliminary shift
+        immutable shift = largerExponent - smallerExponent;
+        foreach (_; 0 .. shift)
+        {
+            immutable stickyBit = smallerMantissa & 1;
+            smallerMantissa >>>= 1;
+            smallerMantissa |= stickyBit;
+        }
+
+        immutable smallerSign = (larger.sign ? -1 : 1) * (smaller.sign ? -1 : 1);
+        immutable sumMantissa = largerMantissa + smallerSign * smallerMantissa;
+        assert(cast(int) sumMantissa > 0);
+
+        immutable sumSign = larger.sign;
+        auto sumExponent = largerExponent;
+
+        auto sum = Rounder(sumSign, cast(ubyte) sumExponent, sumMantissa);
+
+        if (sum.overflow) // unrecoverable
+        {
+            return sum.result;
+        }
+
+        sum.round();
+
+        return sum.result;
+    }
+
     ///
     Binary32 opBinary(string op)(Binary32 rhs) const if (op == "*")
     {
@@ -410,6 +642,86 @@ unittest
     assert((+b).value == b.value);
     assert((-a).value == b.value);
     assert((-b).value == a.value);
+}
+
+unittest
+{
+    import std.random : Mt19937;
+    import std.algorithm : map;
+    import std.range : slide, take;
+
+    union FloatContainer
+    {
+        uint i;
+        float f;
+    }
+
+    auto testcases = Mt19937(17).map!(a => FloatContainer(a).f)
+        .map!(a => Binary32(a))
+        .slide(2);
+
+    foreach (operands; testcases.take(1000))
+    {
+        immutable lhs = operands.front;
+        operands.popFront();
+        immutable rhs = operands.front;
+
+        immutable sum = lhs + rhs;
+        immutable sumRef = Binary32(lhs.value + rhs.value);
+
+        if (sum.isNaN)
+        {
+            assert(sumRef.isNaN);
+        }
+        else
+        {
+            import std.format : format;
+
+            assert(sum.value == sumRef.value, format!"%a + %a = %a, %a"(lhs.value,
+                    rhs.value, sum.value, sumRef.value) ~ "\n" ~ format!"%s\n%s\n%s\n%s"(lhs,
+                    rhs, sum, sumRef));
+        }
+    }
+}
+
+unittest
+{
+    import std.random : Mt19937;
+    import std.algorithm : map;
+    import std.range : slide, take;
+
+    union FloatContainer
+    {
+        uint i;
+        float f;
+    }
+
+    auto testcases = Mt19937(9).map!(a => FloatContainer(a).f)
+        .map!(a => Binary32(a))
+        .slide(2);
+
+    foreach (operands; testcases.take(1000))
+    {
+        immutable lhs = operands.front;
+        operands.popFront();
+        immutable rhs = operands.front;
+
+        immutable diff = lhs - rhs;
+        immutable diffRef = Binary32(lhs.value - rhs.value);
+
+        if (diff.isNaN)
+        {
+            assert(diffRef.isNaN);
+        }
+        else
+        {
+            import std.format : format;
+
+            assert(diff.value == diffRef.value, format!"%a - %a = %a, %a"(lhs.value,
+                    rhs.value, diff.value, diffRef.value) ~ "\n" ~ format!"%s\n%s\n%s\n%s"(lhs,
+                    rhs, diff, diffRef));
+        }
+    }
 }
 
 unittest
