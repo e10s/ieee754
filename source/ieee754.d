@@ -125,14 +125,14 @@ struct Binary32
         }
     }
 
-    private struct Rounder // TODO: use this in opMul
+    private struct _RounderImpl
     {
         bool sign;
         int exponent;
         uint mantissa; // [padding][reserved for carry: 1][integer: 1].[fraction: fractionBits][GRS: 3]
 
         // param mantissa: [padding][reserved for carry: 1][integer: 1].[fraction: fractionBits][GRS: 3]
-        this(bool sign, int exponent, uint mantissa)
+        this(bool sign, int exponent, uint mantissa) nothrow @nogc @safe
         {
             this.sign = sign;
 
@@ -147,7 +147,7 @@ struct Binary32
             {
                 enum integerBit = 1U << (fractionBits + 3);
 
-                foreach (i; 0 .. fractionBits + 3)
+                foreach (_; 0 .. fractionBits + 3)
                 {
                     exponent--;
                     mantissa <<= 1;
@@ -175,7 +175,7 @@ struct Binary32
             this.mantissa = mantissa;
         }
 
-        void shiftMantissaToLeftBy1(ref int exp, ref uint mant)
+        void shiftMantissaToLeftBy1(ref int exp, ref uint mant) nothrow @nogc @safe
         {
             immutable stickyBit = mant & 1;
             exp++;
@@ -194,7 +194,7 @@ struct Binary32
             return (mantissa >>> 3) & fracMask;
         }
 
-        void round() // round to nearest even (RN)
+        void round() nothrow @nogc @safe // round to nearest even (RN)
         {
             immutable ulp_r_s = mantissa & 0b1011;
             immutable g = mantissa & 0b100;
@@ -240,6 +240,19 @@ struct Binary32
                     2, fractionBits, 3);
             return format!fmt(exponent, integerPart, fractionPart, mantissa & 0b111);
         }
+    }
+
+    private Binary32 _rounder(bool sign, int exponent, uint mantissa) const nothrow @nogc @safe
+    {
+        auto r = _RounderImpl(sign, exponent, mantissa);
+
+        if (r.overflow) // unrecoverable
+        {
+            return r.result;
+        }
+
+        r.round();
+        return r.result;
     }
 
     ///
@@ -345,16 +358,7 @@ struct Binary32
         immutable sumSign = larger.sign;
         auto sumExponent = largerExponent;
 
-        auto sum = Rounder(sumSign, cast(ubyte) sumExponent, sumMantissa);
-
-        if (sum.overflow) // unrecoverable
-        {
-            return sum.result;
-        }
-
-        sum.round();
-
-        return sum.result;
+        return _rounder(sumSign, cast(ubyte) sumExponent, sumMantissa);
     }
 
     ///
@@ -398,26 +402,30 @@ struct Binary32
         uint rhsFraction = rhs.fraction;
 
         // Make normal form of 1.[fraction] * 2^E from subnormal
-        void normalizeSubnormal(ref int exp, ref uint frac)
+        void normalizeSubnormal(ref int exponent, ref uint fraction)
         in
         {
-            assert(!exp); // Exponent of subnormal is 0
+            assert(!exponent); // Exponent of subnormal is 0
         }
         do
         {
-            exp = 1;
-            foreach (i; 1 .. fractionBits + 1)
-            {
-                enum implicitLeadingBit = 1U << fractionBits;
-                enum fracMask = implicitLeadingBit - 1;
-                if ((frac << i) & implicitLeadingBit)
-                {
-                    exp -= i;
-                    frac = (frac << i) & fracMask;
+            exponent = 1;
+            uint mantissa = fraction;
 
+            enum integerBit = 1U << fractionBits;
+            enum fracMask = integerBit - 1;
+            foreach (_; 0 .. fractionBits)
+            {
+                exponent--;
+                mantissa <<= 1;
+
+                if (mantissa & integerBit)
+                {
                     break;
                 }
             }
+
+            fraction = mantissa & fracMask;
         }
 
         if (!lhsExponent) // lhs is subnormal
@@ -430,128 +438,23 @@ struct Binary32
             normalizeSubnormal(rhsExponent, rhsFraction);
         }
 
-        struct Product
-        {
-            bool sign; // for future use
-            int exponent;
-            uint mantissa; // [padding][reserved for carry: 1][integer: 1].[fraction: fractionBits][GRS: 3]
-
-            // param mantissa: [padding][integer: 2].[fraction: fractionBits][extra: fractionBits]
-            this(bool sign, int exponent, ulong mantissa)
-            {
-                this.sign = sign;
-
-                bool stickyBit;
-
-                immutable integer = mantissa >>> (fractionBits * 2);
-                if (integer > 1) // Normalize
-                {
-                    stickyBit = mantissa & 1;
-                    exponent++;
-                    mantissa >>>= 1;
-                }
-
-                if (exponent < 1) // Subnormalize
-                {
-                    // Make 0.xxxx * 2^1
-                    immutable shift = 1 - exponent;
-                    foreach (_; 0 .. shift)
-                    {
-                        stickyBit |= mantissa & 1;
-                        exponent++;
-                        mantissa >>>= 1;
-                    }
-                    assert(exponent == 1);
-                }
-
-                this.exponent = exponent;
-
-                // Now, mantissa means: [padding][integer: 1].[fraction: fractionBits][GR: 2][tmp S: 1][extra for S: fractionBits-3]
-                enum extraBits = fractionBits - 3;
-                enum extraMask = (1 << extraBits) - 1;
-                stickyBit |= cast(bool)(mantissa & extraMask);
-                this.mantissa = cast(uint)(mantissa >>> extraBits) | stickyBit;
-            }
-
-            uint integerPart() const @property
-            {
-                return mantissa >>> (fractionBits + 3);
-            }
-
-            uint fractionPart() const @property
-            {
-                enum fracMask = (1 << fractionBits) - 1;
-                return (mantissa >>> 3) & fracMask;
-            }
-
-            void round() // round to nearest even (RN)
-            {
-                immutable ulp_r_s = mantissa & 0b1011;
-                immutable g = mantissa & 0b100;
-                immutable roundUp = g && ulp_r_s; // something magic
-                mantissa >>>= 3;
-                mantissa += roundUp;
-                mantissa <<= 3;
-
-                if (integerPart > 1)
-                {
-                    assert(integerPart == 0b10 || integerPart == 0b11);
-                    exponent += 1;
-                    immutable stickyBit = mantissa & 1;
-                    mantissa >>>= 1;
-                    mantissa |= stickyBit;
-                }
-            }
-
-            bool overflow() const @property
-            {
-                return exponent > 0xFE;
-            }
-
-            bool underflow() const @property
-            {
-                return exponent <= 1 && !integerPart;
-            }
-            // DEBUG
-            string toString() const pure @safe
-            {
-                import std.format : format;
-
-                immutable fmt = format!"exp: %%0%sb, int: %%0%sb, frac: %%0%sb, grs: %%0%sb"(exponentBits,
-                        2, fractionBits, 3);
-                return format!fmt(exponent, integerPart, fractionPart, mantissa & 0b111);
-            }
-        }
+        int prodExponent = lhsExponent + rhsExponent - cast(int) bias;
 
         enum implicitLeadingBit = 1UL << fractionBits;
         immutable ulong lhsMantissa = implicitLeadingBit | lhsFraction;
         immutable ulong rhsMantissa = implicitLeadingBit | rhsFraction;
 
         // [padding][integer: 2].[fraction: fractionBits][extra: fractionBits]
-        immutable prodMantissa = lhsMantissa * rhsMantissa;
-
-        auto prod = Product(prodSign, lhsExponent + rhsExponent - cast(int) bias, prodMantissa);
-
-        if (prod.overflow) // unrecoverable
+        ulong prodMantissa = lhsMantissa * rhsMantissa;
+        foreach (_; 0 .. fractionBits - 3)
         {
-            auto inf = infinity;
-            inf.sign = prodSign;
-            return inf;
+            immutable stickyBit = prodMantissa & 1;
+            prodMantissa >>>= 1;
+            prodMantissa |= stickyBit;
         }
+        // [padding][integer: 2].[fraction: fractionBits][GRS: 3]
 
-        prod.round();
-
-        if (prod.overflow)
-        {
-            auto inf = infinity;
-            inf.sign = prodSign;
-            return inf;
-        }
-
-        assert(prod.exponent < 0xFF);
-        assert(prod.exponent > 0);
-
-        return Binary32(prodSign, prod.underflow ? 0 : cast(ubyte) prod.exponent, prod.fractionPart);
+        return _rounder(prodSign, prodExponent, cast(uint) prodMantissa);
     }
 
     ///
