@@ -259,7 +259,7 @@ struct Binary32
     Binary32 opBinary(string op)(Binary32 rhs) const if (op == "+" || op == "-")
     {
         immutable lhs = this;
-        if (op == "-")
+        static if (op == "-")
         {
             rhs.sign = !rhs.sign;
         }
