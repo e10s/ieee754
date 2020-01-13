@@ -458,6 +458,102 @@ struct Binary32
     }
 
     ///
+    Binary32 opBinary(string op)(Binary32 rhs) const if (op == "/")
+    {
+        immutable lhs = this;
+        if (lhs.isNaN)
+        {
+            return lhs;
+        }
+
+        if (rhs.isNaN)
+        {
+            return rhs;
+        }
+
+        if ((lhs.isZero && rhs.isZero) || (lhs.isInfinity && rhs.isInfinity))
+        {
+            return -nan; // Why -???
+        }
+
+        immutable quotSign = lhs.sign ^ rhs.sign;
+
+        if (lhs.isZero || rhs.isInfinity)
+        {
+            auto z = zero;
+            z.sign = quotSign;
+            return z;
+        }
+
+        if (lhs.isInfinity || rhs.isZero)
+        {
+            auto inf = infinity;
+            inf.sign = quotSign;
+            return inf;
+        }
+
+        int lhsExponent = lhs.exponent;
+        int rhsExponent = rhs.exponent;
+        uint lhsFraction = lhs.fraction;
+        uint rhsFraction = rhs.fraction;
+
+        // Make normal form of 1.[fraction] * 2^E from subnormal
+        void normalizeSubnormal(ref int exponent, ref uint fraction)
+        in
+        {
+            assert(!exponent); // Exponent of subnormal is 0
+        }
+        do
+        {
+            exponent = 1;
+            uint mantissa = fraction;
+
+            enum integerBit = 1U << fractionBits;
+            enum fracMask = integerBit - 1;
+            foreach (_; 0 .. fractionBits)
+            {
+                exponent--;
+                mantissa <<= 1;
+
+                if (mantissa & integerBit)
+                {
+                    break;
+                }
+            }
+
+            fraction = mantissa & fracMask;
+        }
+
+        if (!lhsExponent) // lhs is subnormal
+        {
+            normalizeSubnormal(lhsExponent, lhsFraction);
+        }
+
+        if (!rhsExponent) // rhs is subnormal
+        {
+            normalizeSubnormal(rhsExponent, rhsFraction);
+        }
+
+        immutable quotExponent = lhsExponent - rhsExponent + bias;
+
+        enum implicitLeadingBit = 1U << fractionBits;
+        immutable lhsMantissa = implicitLeadingBit | lhsFraction;
+        immutable rhsMantissa = implicitLeadingBit | rhsFraction;
+
+        // [padding][integer: 1].[fraction: fractionBits][margin: fractionBits][margin for GRS: 3]
+        immutable dividend = cast(ulong) lhsMantissa << (fractionBits + 3);
+
+        // [padding][integer: 1].[fraction: fractionBits][GRS: 3]
+        ulong quotMantissa = dividend / rhsMantissa;
+
+        immutable stickyBit = dividend != quotMantissa * rhsMantissa;
+        quotMantissa |= stickyBit;
+        assert(quotMantissa >>> (fractionBits - 1 + 3));
+
+        return _rounder(quotSign, quotExponent, cast(uint) quotMantissa);
+    }
+
+    ///
     string toString() const pure @safe
     {
         import std.format : format;
@@ -662,6 +758,45 @@ unittest
 
             assert(prod.value == prodRef.value, format!"%a * %a = %a, %a"(lhs.value,
                     rhs.value, prod.value, prodRef.value));
+        }
+    }
+}
+
+unittest
+{
+    import std.random : Mt19937;
+    import std.algorithm : map;
+    import std.range : slide, take;
+
+    union FloatContainer
+    {
+        uint i;
+        float f;
+    }
+
+    auto testcases = Mt19937().map!(a => FloatContainer(a).f)
+        .map!(a => Binary32(a))
+        .slide(2);
+
+    foreach (operands; testcases.take(1000))
+    {
+        immutable lhs = operands.front;
+        operands.popFront();
+        immutable rhs = operands.front;
+
+        immutable quot = lhs / rhs;
+        immutable quotRef = Binary32(lhs.value / rhs.value);
+
+        if (quot.isNaN)
+        {
+            assert(quotRef.isNaN);
+        }
+        else
+        {
+            import std.format : format;
+
+            assert(quot.value == quotRef.value, format!"%a / %a = %a, %a"(lhs.value,
+                    rhs.value, quot.value, quotRef.value));
         }
     }
 }
