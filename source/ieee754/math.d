@@ -87,6 +87,38 @@ bool isZero(Binary32 x) pure nothrow @nogc @safe
     return !x.exponent && !x.fraction;
 }
 
+import std.traits : isIntegral;
+
+///
+Binary32 copysign(T)(T to, Binary32 from) pure nothrow @nogc @safe
+        if (is(T : Binary32) || isIntegral!T)
+{
+    static if (isIntegral!T)
+    {
+        immutable to_ = Binary32(to);
+    }
+    else
+    {
+        alias to_ = to;
+    }
+    return signbit(to_) == signbit(from) ? to_ : -to_;
+}
+
+///
+unittest
+{
+    immutable one = Binary32(1.0);
+
+    assert(isIdentical(copysign(one, one), one));
+    assert(isIdentical(copysign(1UL, -Binary32.zero), -one));
+    assert(isIdentical(copysign(-one, -one), -one));
+
+    assert(isIdentical(copysign(Binary32.infinity, -one), -Binary32.infinity));
+    assert(isIdentical(copysign(Binary32.nan, one), Binary32.nan));
+    assert(isIdentical(copysign(-Binary32.nan, one), Binary32.nan));
+    assert(isIdentical(copysign(Binary32.nan, -one), -Binary32.nan));
+}
+
 ///
 Binary32 sgn(Binary32 x) pure nothrow @nogc @safe
 {
