@@ -1,4 +1,6 @@
-module ieee754;
+module ieee754.core;
+
+import ieee754.math;
 
 /// Single precision FP
 struct Binary32
@@ -562,74 +564,6 @@ struct Binary32
                 exponentBits, fractionBits);
         return format!fmt(sign, exponent, fraction);
     }
-
-    //---------------------------
-
-    ///
-    Binary32 fabs() const pure nothrow @nogc @safe @property
-    {
-        return sign ? Binary32(0, exponent, fraction) : this;
-    }
-
-    //---------------------------
-
-    ///
-    bool isFinite() const pure nothrow @nogc @safe @property
-    {
-        return exponent != 0xFF;
-    }
-
-    ///
-    bool isInfinity() const pure nothrow @nogc @safe @property
-    {
-        return exponent == 0xFF && !fraction;
-    }
-
-    ///
-    bool isNaN() const pure nothrow @nogc @safe @property
-    {
-        return exponent == 0xFF && fraction;
-    }
-
-    ///
-    bool isNormal() const pure nothrow @nogc @safe @property
-    {
-        return exponent && exponent != 0xFF;
-    }
-
-    ///
-    bool isPowerOf2() const pure nothrow @nogc @safe @property
-    {
-        if (sign)
-        {
-            return false;
-        }
-
-        if (isNormal)
-        {
-            return !fraction;
-        }
-        else if (isSubnormal)
-        {
-            import core.bitop : popcnt;
-
-            return popcnt(fraction) == 1;
-        }
-
-        return false;
-    }
-
-    ///
-    bool isSubnormal() const pure nothrow @nogc @safe @property
-    {
-        return !exponent && fraction;
-    }
-
-    ///
-    bool isZero() const pure nothrow @nogc @safe @property
-    {
-        return !exponent && !fraction;
-    }
 }
 
 unittest
@@ -815,56 +749,4 @@ unittest
     auto f = Binary32(0x1.46f6d8p+125);
     auto g = Binary32(0x1.90e02ap+2);
     assert((f * g).isInfinity);
-}
-
-unittest
-{
-    auto f = Binary32(1, 0b01111100, 0b010_0000_0000_0000_0000_0000);
-    assert(f.value == -.15625);
-    assert(f.fabs == -f);
-    assert(f.isFinite);
-    assert(!f.isInfinity);
-    assert(!f.isNaN);
-    assert(f.isNormal);
-    assert(!f.isPowerOf2);
-    assert(!f.isSubnormal);
-
-    f.exponent = 0;
-    f.fraction = 1;
-    assert(!f.isNormal);
-    assert(!f.isPowerOf2);
-    assert(f.isSubnormal);
-    f.sign = 0;
-    assert(f.isPowerOf2);
-    f.fraction = 3;
-    assert(!f.isPowerOf2);
-
-    f = Binary32(128);
-    assert(f.isPowerOf2);
-
-    f = Binary32(0);
-    assert(!f.isNormal);
-    assert(!f.isPowerOf2);
-    assert(!f.isSubnormal);
-
-    f = Binary32(float.nan);
-    assert(f.fabs.isNaN);
-    assert(!f.isFinite);
-    assert(!f.isInfinity);
-    assert(f.isNaN);
-    assert(!f.isNormal);
-    assert(!f.isPowerOf2);
-    assert(!f.isSubnormal);
-
-    f = Binary32(float.infinity);
-    assert(f.fabs == f);
-    assert(!f.isFinite);
-    assert(f.isInfinity);
-    assert(!f.isPowerOf2);
-    f.sign = 1;
-    assert(f.fabs == -f);
-    assert(f.isInfinity);
-    assert(!f.isNaN);
-    assert(!f.isNormal);
-    assert(!f.isSubnormal);
 }
