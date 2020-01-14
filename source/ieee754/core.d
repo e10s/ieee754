@@ -17,7 +17,7 @@ struct Binary32
                 exponentBits, bool, "sign", signBits));
     }
     ///
-    this(float value)
+    this(float value) pure nothrow @nogc @safe
     {
         this.value = value;
     }

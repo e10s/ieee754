@@ -88,6 +88,22 @@ bool isZero(Binary32 x) pure nothrow @nogc @safe
 }
 
 ///
+Binary32 sgn(Binary32 x) pure nothrow @nogc @safe
+{
+    immutable one = Binary32(1.0);
+    return (x.isNaN || x.isZero) ? x : x.sign ? -one : one;
+}
+
+///
+unittest
+{
+    assert(isIdentical(sgn(Binary32(168.1234)), Binary32(1.0)));
+    assert(isIdentical(sgn(Binary32(-168.1234)), Binary32(-1.0)));
+    assert(isIdentical(sgn(Binary32.zero), Binary32.zero));
+    assert(isIdentical(sgn(-Binary32.zero), -Binary32.zero));
+}
+
+///
 int signbit(Binary32 x) pure nothrow @nogc @safe
 {
     return x.sign;
