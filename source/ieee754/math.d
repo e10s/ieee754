@@ -17,6 +17,25 @@ bool isFinite(Binary32 x) pure nothrow @nogc @safe
 }
 
 ///
+bool isIdentical(Binary32 x, Binary32 y) pure nothrow @nogc @safe
+{
+    return x.sign == y.sign && x.exponent == y.exponent && x.exponent == y.exponent;
+}
+
+///
+unittest
+{
+    assert(isIdentical(Binary32.zero, Binary32.zero));
+    assert(isIdentical(Binary32(1.0), Binary32(1.0)));
+    assert(isIdentical(Binary32.infinity, Binary32.infinity));
+    assert(isIdentical(-Binary32.infinity, -Binary32.infinity));
+
+    assert(!isIdentical(Binary32.zero, -Binary32.zero));
+    assert(!isIdentical(Binary32.nan, -Binary32.nan));
+    assert(!isIdentical(Binary32.infinity, -Binary32.infinity));
+}
+
+///
 bool isInfinity(Binary32 x) pure nothrow @nogc @safe
 {
     return x.exponent == 0xFF && !x.fraction;
