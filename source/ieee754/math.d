@@ -87,6 +87,25 @@ bool isZero(Binary32 x) pure nothrow @nogc @safe
     return !x.exponent && !x.fraction;
 }
 
+///
+int signbit(Binary32 x) pure nothrow @nogc @safe
+{
+    return x.sign;
+}
+
+///
+unittest
+{
+    assert(!signbit(Binary32.nan));
+    assert(signbit(-Binary32.nan));
+    assert(!signbit(Binary32(168.1234)));
+    assert(signbit(Binary32(-168.1234)));
+    assert(!signbit(Binary32.zero));
+    assert(signbit(-Binary32.zero));
+    assert(signbit(-Binary32.max));
+    assert(!signbit(Binary32.max));
+}
+
 unittest
 {
     auto f = Binary32(1, 0b01111100, 0b010_0000_0000_0000_0000_0000);
