@@ -5,7 +5,7 @@ import ieee754.core : Binary32;
 ///
 Binary32 fabs(Binary32 x) pure nothrow @nogc @safe
 {
-    return x.sign ? Binary32(0, x.exponent, x.fraction) : x;
+    return x.sign ? -x : x;
 }
 
 ///
