@@ -556,6 +556,33 @@ struct Binary32
     }
 
     ///
+    bool opEquals()(auto ref const Binary32 x) const pure nothrow @nogc @safe
+    {
+        if (this.isZero && x.isZero)
+        {
+            return true;
+        }
+
+        if (this.isNaN || x.isNaN)
+        {
+            return false;
+        }
+
+        return this is x;
+    }
+
+    pure nothrow @nogc @safe unittest
+    {
+        immutable a = Binary32(3.14);
+        immutable b = Binary32(-3.14);
+
+        assert(a == a);
+        assert(a != b);
+        assert(Binary32.zero == -Binary32.zero);
+        assert(Binary32.nan != Binary32.nan);
+    }
+
+    ///
     string toString() const pure @safe
     {
         import std.format : format;
