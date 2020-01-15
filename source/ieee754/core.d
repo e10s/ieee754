@@ -127,136 +127,6 @@ struct Binary32
         }
     }
 
-    private struct _RounderImpl
-    {
-        bool sign;
-        int exponent;
-        uint mantissa; // [padding][reserved for carry: 1][integer: 1].[fraction: fractionBits][GRS: 3]
-
-        // param mantissa: [padding][reserved for carry: 1][integer: 1].[fraction: fractionBits][GRS: 3]
-        this(bool sign, int exponent, uint mantissa) nothrow @nogc @safe
-        {
-            this.sign = sign;
-
-            immutable integer = mantissa >>> (fractionBits + 3);
-
-            // Normalize temporarily
-            if (integer > 1)
-            {
-                shiftMantissaToLeftBy1(exponent, mantissa);
-            }
-            else if (!integer)
-            {
-                enum integerBit = 1U << (fractionBits + 3);
-
-                foreach (_; 0 .. fractionBits + 3)
-                {
-                    exponent--;
-                    mantissa <<= 1;
-
-                    if (mantissa & integerBit)
-                    {
-                        break;
-                    }
-                }
-            }
-
-            // Subnormalize if needed
-            if (exponent < 1)
-            {
-                // Make 0.xxxx * 2^1
-                immutable shift = 1 - exponent;
-                foreach (_; 0 .. shift)
-                {
-                    shiftMantissaToLeftBy1(exponent, mantissa);
-                }
-                assert(exponent == 1);
-            }
-
-            this.exponent = exponent;
-            this.mantissa = mantissa;
-        }
-
-        void shiftMantissaToLeftBy1(ref int exp, ref uint mant) nothrow @nogc @safe
-        {
-            immutable stickyBit = mant & 1;
-            exp++;
-            mant >>>= 1;
-            mant |= stickyBit;
-        }
-
-        uint integerPart() const pure nothrow @nogc @safe @property
-        {
-            return mantissa >>> (fractionBits + 3);
-        }
-
-        uint fractionPart() const pure nothrow @nogc @safe @property
-        {
-            enum fracMask = (1 << fractionBits) - 1;
-            return (mantissa >>> 3) & fracMask;
-        }
-
-        void round() nothrow @nogc @safe // round to nearest even (RN)
-        {
-            immutable ulp_r_s = mantissa & 0b1011;
-            immutable g = mantissa & 0b100;
-            immutable roundUp = g && ulp_r_s; // something magic
-            mantissa >>>= 3;
-            mantissa += roundUp;
-            mantissa <<= 3;
-
-            if (integerPart > 1)
-            {
-                assert(integerPart == 0b10 || integerPart == 0b11);
-                shiftMantissaToLeftBy1(exponent, mantissa);
-            }
-        }
-
-        bool overflow() const pure nothrow @nogc @safe @property
-        {
-            return exponent > 0xFE;
-        }
-
-        bool underflow() const pure nothrow @nogc @safe @property
-        {
-            return exponent <= 1 && !integerPart;
-        }
-
-        Binary32 result() const pure nothrow @nogc @safe @property
-        {
-            if (overflow)
-            {
-                return sign ? -infinity : infinity;
-            }
-            assert(exponent < 0xFF);
-            assert(exponent > 0);
-
-            return Binary32(sign, underflow ? 0 : cast(ubyte) exponent, fractionPart);
-        }
-
-        string toString() const pure @safe
-        {
-            import std.format : format;
-
-            immutable fmt = format!"exp: %%0%sb, int: %%0%sb, frac: %%0%sb, grs: %%0%sb"(exponentBits,
-                    2, fractionBits, 3);
-            return format!fmt(exponent, integerPart, fractionPart, mantissa & 0b111);
-        }
-    }
-
-    private Binary32 _rounder(bool sign, int exponent, uint mantissa) const nothrow @nogc @safe
-    {
-        auto r = _RounderImpl(sign, exponent, mantissa);
-
-        if (r.overflow) // unrecoverable
-        {
-            return r.result;
-        }
-
-        r.round();
-        return r.result;
-    }
-
     ///
     Binary32 opBinary(string op)(Binary32 rhs) const if (op == "+" || op == "-")
     {
@@ -591,6 +461,136 @@ struct Binary32
                 exponentBits, fractionBits);
         return format!fmt(sign, exponent, fraction);
     }
+}
+
+private struct _RounderImpl
+{
+    bool sign;
+    int exponent;
+    uint mantissa; // [padding][reserved for carry: 1][integer: 1].[fraction: fractionBits][GRS: 3]
+
+    // param mantissa: [padding][reserved for carry: 1][integer: 1].[fraction: fractionBits][GRS: 3]
+    this(bool sign, int exponent, uint mantissa) pure nothrow @nogc @safe
+    {
+        this.sign = sign;
+
+        immutable integer = mantissa >>> (Binary32.fractionBits + 3);
+
+        // Normalize temporarily
+        if (integer > 1)
+        {
+            shiftMantissaToLeftBy1(exponent, mantissa);
+        }
+        else if (!integer)
+        {
+            enum integerBit = 1U << (Binary32.fractionBits + 3);
+
+            foreach (_; 0 .. Binary32.fractionBits + 3)
+            {
+                exponent--;
+                mantissa <<= 1;
+
+                if (mantissa & integerBit)
+                {
+                    break;
+                }
+            }
+        }
+
+        // Subnormalize if needed
+        if (exponent < 1)
+        {
+            // Make 0.xxxx * 2^1
+            immutable shift = 1 - exponent;
+            foreach (_; 0 .. shift)
+            {
+                shiftMantissaToLeftBy1(exponent, mantissa);
+            }
+            assert(exponent == 1);
+        }
+
+        this.exponent = exponent;
+        this.mantissa = mantissa;
+    }
+
+    void shiftMantissaToLeftBy1(ref int exp, ref uint mant) pure nothrow @nogc @safe
+    {
+        immutable stickyBit = mant & 1;
+        exp++;
+        mant >>>= 1;
+        mant |= stickyBit;
+    }
+
+    uint integerPart() const pure nothrow @nogc @safe @property
+    {
+        return mantissa >>> (Binary32.fractionBits + 3);
+    }
+
+    uint fractionPart() const pure nothrow @nogc @safe @property
+    {
+        enum fracMask = (1 << Binary32.fractionBits) - 1;
+        return (mantissa >>> 3) & fracMask;
+    }
+
+    void round() pure nothrow @nogc @safe // round to nearest even (RN)
+    {
+        immutable ulp_r_s = mantissa & 0b1011;
+        immutable g = mantissa & 0b100;
+        immutable roundUp = g && ulp_r_s; // something magic
+        mantissa >>>= 3;
+        mantissa += roundUp;
+        mantissa <<= 3;
+
+        if (integerPart > 1)
+        {
+            assert(integerPart == 0b10 || integerPart == 0b11);
+            shiftMantissaToLeftBy1(exponent, mantissa);
+        }
+    }
+
+    bool overflow() const pure nothrow @nogc @safe @property
+    {
+        return exponent > 0xFE;
+    }
+
+    bool underflow() const pure nothrow @nogc @safe @property
+    {
+        return exponent <= 1 && !integerPart;
+    }
+
+    Binary32 result() const pure nothrow @nogc @safe @property
+    {
+        if (overflow)
+        {
+            return sign ? -Binary32.infinity : Binary32.infinity;
+        }
+        assert(exponent < 0xFF);
+        assert(exponent > 0);
+
+        return Binary32(sign, underflow ? 0 : cast(ubyte) exponent, fractionPart);
+    }
+
+    string toString() const pure @safe
+    {
+        import std.format : format;
+
+        immutable fmt = format!"exp: %%0%sb, int: %%0%sb, frac: %%0%sb, grs: %%0%sb"(
+                Binary32.exponentBits, 2, Binary32.fractionBits, 3);
+        return format!fmt(exponent, integerPart, fractionPart, mantissa & 0b111);
+    }
+}
+
+package Binary32 _rounder(bool sign, int exponent, uint mantissa) pure nothrow @nogc @safe
+{
+    auto r = _RounderImpl(sign, exponent, mantissa);
+
+    if (r.overflow) // unrecoverable
+    {
+        return r.result;
+    }
+
+    r.round();
+    return r.result;
 }
 
 unittest

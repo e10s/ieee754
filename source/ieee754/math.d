@@ -8,6 +8,105 @@ Binary32 fabs(Binary32 x) pure nothrow @nogc @safe
     return x.sign ? Binary32(0, x.exponent, x.fraction) : x;
 }
 
+///
+Binary32 sqrt(Binary32 x) pure nothrow @nogc @safe
+{
+    if (x.isNaN || x.isInfinity || x.isZero)
+    {
+        return x;
+    }
+
+    if (x.sign)
+    {
+        return -Binary32.nan; // Why -???
+    }
+
+    int exponent = x.exponent;
+    uint mantissa = x.fraction;
+
+    enum integerBit = 1U << Binary32.fractionBits;
+    // Make normal form of 1.[fraction] * 2^E from subnormal
+    if (!exponent) // Exponent of subnormal is 0
+    {
+        exponent = 1;
+
+        foreach (_; 0 .. Binary32.fractionBits)
+        {
+            exponent--;
+            mantissa <<= 1;
+
+            if (mantissa & integerBit)
+            {
+                break;
+            }
+        }
+    }
+    else
+    {
+        mantissa |= integerBit;
+    }
+
+    enum int bias = cast(int) Binary32.bias;
+
+    if ((exponent - bias) % 2)
+    {
+        exponent--;
+        mantissa <<= 1;
+    }
+
+    assert((exponent - bias) % 2 == 0);
+
+    immutable sqrtExponent = (exponent - bias) / 2 + bias;
+
+    // [padding][integer: 2].[fraction: fractionBits][margin + for G: fractionBits + 2]
+    immutable operandMantissa = cast(ulong) mantissa << (Binary32.fractionBits + 2);
+
+    // [padding][integer: 1].[fraction: fractionBits][G: 1]
+    uint sqrtMantissa;
+
+    uint tempAdd, tempMulSub;
+
+    foreach_reverse (i; 0 .. (Binary32.fractionBits + 1) + 1)
+    {
+        immutable twoBits = (operandMantissa >>> (i * 2)) & 0b11;
+        tempMulSub <<= 2;
+        tempMulSub |= twoBits;
+
+        immutable bit = !(((tempAdd << 1) | 1) > tempMulSub);
+
+        sqrtMantissa <<= 1;
+        sqrtMantissa |= bit;
+
+        immutable temp = (tempAdd << 1) | bit;
+        tempAdd = temp + bit;
+        tempMulSub -= temp * bit;
+    }
+
+    sqrtMantissa <<= 2;
+    sqrtMantissa |= cast(bool) tempMulSub << 1;
+    // [padding][integer: 1].[fraction: fractionBits][GRS: 3]
+    assert(sqrtMantissa >>> (Binary32.fractionBits + 3) == 1);
+
+    import ieee754.core : _rounder;
+
+    return _rounder(0, sqrtExponent, sqrtMantissa);
+}
+
+///
+@safe pure nothrow @nogc unittest
+{
+    static import std.math;
+
+    assert(sqrt(Binary32(2.0)) == Binary32(std.math.sqrt(2.0f)));
+    assert(sqrt(Binary32(9.0)) == Binary32(std.math.sqrt(9.0f)));
+
+    assert(isNaN(sqrt(Binary32(-1.0f))));
+
+    assert(sqrt(-Binary32.zero) == -Binary32.zero);
+
+    immutable small = Binary32.min_normal / Binary32(7.0);
+    assert(sqrt(small) == Binary32(std.math.sqrt(small.value)));
+}
 //---------------------------
 
 ///
