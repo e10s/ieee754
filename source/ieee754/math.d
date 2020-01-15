@@ -9,6 +9,14 @@ Binary32 fabs(Binary32 x) pure nothrow @nogc @safe
 }
 
 ///
+@safe pure nothrow @nogc unittest
+{
+    assert(isIdentical(fabs(Binary32.zero), Binary32.zero));
+    assert(isIdentical(fabs(-Binary32.zero), Binary32.zero));
+    assert(fabs(Binary32(-10.0)) == Binary32(10.0));
+}
+
+///
 Binary32 sqrt(Binary32 x) pure nothrow @nogc @safe
 {
     if (x.isNaN || x.isInfinity || x.isZero)
@@ -116,13 +124,23 @@ bool isFinite(Binary32 x) pure nothrow @nogc @safe
 }
 
 ///
+@safe pure nothrow @nogc unittest
+{
+    assert(isFinite(Binary32(1.23)));
+    assert(isFinite(Binary32.max));
+    assert(isFinite(Binary32.min_normal));
+    assert(!isFinite(Binary32.nan));
+    assert(!isFinite(Binary32.infinity));
+}
+
+///
 bool isIdentical(Binary32 x, Binary32 y) pure nothrow @nogc @safe
 {
     return x.sign == y.sign && x.exponent == y.exponent && x.exponent == y.exponent;
 }
 
 ///
-unittest
+@safe pure nothrow @nogc unittest
 {
     assert(isIdentical(Binary32.zero, Binary32.zero));
     assert(isIdentical(Binary32(1.0), Binary32(1.0)));
@@ -141,15 +159,55 @@ bool isInfinity(Binary32 x) pure nothrow @nogc @safe
 }
 
 ///
+@safe pure nothrow @nogc unittest
+{
+    assert(!isInfinity(Binary32.init));
+    assert(!isInfinity(-Binary32.init));
+    assert(!isInfinity(Binary32.nan));
+    assert(!isInfinity(-Binary32.nan));
+    assert(isInfinity(Binary32.infinity));
+    assert(isInfinity(-Binary32.infinity));
+    assert(isInfinity(-Binary32(1.0) / Binary32.zero));
+}
+
+///
 bool isNaN(Binary32 x) pure nothrow @nogc @safe
 {
     return x.exponent == 0xFF && x.fraction;
 }
 
 ///
+@safe pure nothrow @nogc unittest
+{
+    assert(isNaN(Binary32.init));
+    assert(isNaN(-Binary32.init));
+    assert(isNaN(Binary32.nan));
+    assert(isNaN(-Binary32.nan));
+    assert(!isNaN(Binary32(53.6)));
+    assert(!isNaN(Binary32(-53.6)));
+}
+
+///
 bool isNormal(Binary32 x) pure nothrow @nogc @safe
 {
     return x.exponent && x.exponent != 0xFF;
+}
+
+///
+@safe pure nothrow @nogc unittest
+{
+    immutable f = Binary32(3);
+    immutable d = Binary32(500);
+    immutable e = Binary32(10e+35);
+
+    assert(isNormal(f));
+    assert(isNormal(d));
+    assert(isNormal(e));
+
+    assert(!isNormal(Binary32.zero));
+    assert(!isNormal(Binary32.infinity));
+    assert(isNormal(-Binary32.max));
+    assert(!isNormal(Binary32.min_normal / Binary32(4)));
 }
 
 ///
@@ -175,15 +233,58 @@ bool isPowerOf2(Binary32 x) pure nothrow @nogc @safe
 }
 
 ///
+@safe pure nothrow @nogc unittest
+{
+    static import std.math;
+
+    assert(isPowerOf2(Binary32(1.0)));
+    assert(isPowerOf2(Binary32(2.0)));
+    assert(isPowerOf2(Binary32(0.5)));
+    assert(isPowerOf2(Binary32(std.math.pow(2.0L, 96))));
+    assert(isPowerOf2(Binary32(std.math.pow(2.0L, -77))));
+
+    assert(!isPowerOf2(Binary32(-2.0)));
+    assert(!isPowerOf2(Binary32(-0.5)));
+    assert(!isPowerOf2(Binary32.zero));
+    assert(!isPowerOf2(Binary32(4.315)));
+    assert(!isPowerOf2(Binary32(1.0) / Binary32(3.0)));
+
+    assert(!isPowerOf2(Binary32.nan));
+    assert(!isPowerOf2(Binary32.infinity));
+
+    assert(isPowerOf2(Binary32.min_normal / Binary32(4.0)));
+    assert(!isPowerOf2(Binary32.min_normal / Binary32(3.0)));
+}
+
+///
 bool isSubnormal(Binary32 x) pure nothrow @nogc @safe
 {
     return !x.exponent && x.fraction;
 }
 
 ///
+@safe pure nothrow @nogc unittest
+{
+    for (auto f = Binary32(1.0); !isSubnormal(f); f = f / Binary32(2)) // TODO: use opAssign
+    {
+        assert(!isZero(f));
+    }
+}
+
+///
 bool isZero(Binary32 x) pure nothrow @nogc @safe
 {
     return !x.exponent && !x.fraction;
+}
+
+///
+@safe pure nothrow @nogc unittest
+{
+    assert(isZero(Binary32.zero));
+    assert(isZero(-Binary32.zero));
+    assert(!isZero(Binary32.infinity));
+    assert(!isZero(Binary32.nan));
+    assert(!isZero(Binary32(0.006)));
 }
 
 import std.traits : isIntegral;
@@ -204,15 +305,16 @@ Binary32 copysign(T)(T to, Binary32 from) pure nothrow @nogc @safe
 }
 
 ///
-unittest
+@safe pure nothrow @nogc unittest
 {
     immutable one = Binary32(1.0);
 
-    assert(isIdentical(copysign(one, one), one));
-    assert(isIdentical(copysign(1UL, -Binary32.zero), -one));
-    assert(isIdentical(copysign(-one, -one), -one));
+    assert(copysign(one, one) == one);
+    assert(copysign(one, -Binary32.zero) == -one);
+    assert(copysign(1UL, -one) == -one);
+    assert(copysign(-one, -one) == -one);
 
-    assert(isIdentical(copysign(Binary32.infinity, -one), -Binary32.infinity));
+    assert(copysign(Binary32.infinity, -one) == -Binary32.infinity);
     assert(isIdentical(copysign(Binary32.nan, one), Binary32.nan));
     assert(isIdentical(copysign(-Binary32.nan, one), Binary32.nan));
     assert(isIdentical(copysign(Binary32.nan, -one), -Binary32.nan));
@@ -226,12 +328,12 @@ Binary32 sgn(Binary32 x) pure nothrow @nogc @safe
 }
 
 ///
-unittest
+@safe pure nothrow @nogc unittest
 {
-    assert(isIdentical(sgn(Binary32(168.1234)), Binary32(1.0)));
-    assert(isIdentical(sgn(Binary32(-168.1234)), Binary32(-1.0)));
-    assert(isIdentical(sgn(Binary32.zero), Binary32.zero));
-    assert(isIdentical(sgn(-Binary32.zero), -Binary32.zero));
+    assert(sgn(Binary32(168.1234)) == Binary32(1.0));
+    assert(sgn(Binary32(-168.1234)) == Binary32(-1.0));
+    assert(sgn(Binary32.zero) == Binary32.zero);
+    assert(sgn(-Binary32.zero) == -Binary32.zero);
 }
 
 ///
@@ -241,7 +343,7 @@ int signbit(Binary32 x) pure nothrow @nogc @safe
 }
 
 ///
-unittest
+@safe pure nothrow @nogc unittest
 {
     assert(!signbit(Binary32.nan));
     assert(signbit(-Binary32.nan));
@@ -251,56 +353,4 @@ unittest
     assert(signbit(-Binary32.zero));
     assert(signbit(-Binary32.max));
     assert(!signbit(Binary32.max));
-}
-
-unittest
-{
-    auto f = Binary32(1, 0b01111100, 0b010_0000_0000_0000_0000_0000);
-    assert(f.value == -.15625);
-    assert(f.fabs == -f);
-    assert(f.isFinite);
-    assert(!f.isInfinity);
-    assert(!f.isNaN);
-    assert(f.isNormal);
-    assert(!f.isPowerOf2);
-    assert(!f.isSubnormal);
-
-    f.exponent = 0;
-    f.fraction = 1;
-    assert(!f.isNormal);
-    assert(!f.isPowerOf2);
-    assert(f.isSubnormal);
-    f.sign = 0;
-    assert(f.isPowerOf2);
-    f.fraction = 3;
-    assert(!f.isPowerOf2);
-
-    f = Binary32(128);
-    assert(f.isPowerOf2);
-
-    f = Binary32(0);
-    assert(!f.isNormal);
-    assert(!f.isPowerOf2);
-    assert(!f.isSubnormal);
-
-    f = Binary32(float.nan);
-    assert(f.fabs.isNaN);
-    assert(!f.isFinite);
-    assert(!f.isInfinity);
-    assert(f.isNaN);
-    assert(!f.isNormal);
-    assert(!f.isPowerOf2);
-    assert(!f.isSubnormal);
-
-    f = Binary32(float.infinity);
-    assert(f.fabs == f);
-    assert(!f.isFinite);
-    assert(f.isInfinity);
-    assert(!f.isPowerOf2);
-    f.sign = 1;
-    assert(f.fabs == -f);
-    assert(f.isInfinity);
-    assert(!f.isNaN);
-    assert(!f.isNormal);
-    assert(!f.isSubnormal);
 }
