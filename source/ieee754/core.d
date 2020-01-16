@@ -246,6 +246,30 @@ struct Binary32
     }
 
     ///
+    @safe pure nothrow @nogc unittest
+    {
+        assert(isNaN(Binary32.nan + Binary32(1.0)));
+        assert(isNaN(Binary32(1.0) - Binary32.nan));
+        assert(isNaN(Binary32.infinity - Binary32.infinity));
+        assert(Binary32.infinity + Binary32.infinity == Binary32.infinity);
+        assert(Binary32.infinity - Binary32(1.0) == Binary32.infinity);
+        assert(Binary32(1.0) - Binary32.infinity == -Binary32.infinity);
+
+        assert(isIdentical(Binary32.zero + Binary32.zero, Binary32.zero));
+        assert(isIdentical(Binary32.zero - Binary32.zero, Binary32.zero));
+        assert(isIdentical(-Binary32.zero + Binary32.zero, Binary32.zero));
+        assert(isIdentical(-Binary32.zero - Binary32.zero, -Binary32.zero));
+
+        assert(Binary32(1.0) - Binary32.zero == Binary32(1.0));
+        assert(Binary32.zero - Binary32(1.0) == Binary32(-1.0));
+
+        assert(Binary32(7.0) + Binary32(3.0) == Binary32(7.0 + 3.0));
+
+        assert(Binary32(float.min_normal / 2) + Binary32(
+                float.min_normal / 8) == Binary32(float.min_normal / 2 + float.min_normal / 8));
+    }
+
+    ///
     Binary32 opBinary(string op)(Binary32 rhs) const if (op == "*")
     {
         immutable lhs = this;
@@ -603,86 +627,6 @@ package Binary32 _rounder(bool sign, int exponent, uint mantissa) pure nothrow @
 
     r.round();
     return r.result;
-}
-
-unittest
-{
-    import std.random : Mt19937;
-    import std.algorithm : map;
-    import std.range : slide, take;
-
-    union FloatContainer
-    {
-        uint i;
-        float f;
-    }
-
-    auto testcases = Mt19937(17).map!(a => FloatContainer(a).f)
-        .map!(a => Binary32(a))
-        .slide(2);
-
-    foreach (operands; testcases.take(1000))
-    {
-        immutable lhs = operands.front;
-        operands.popFront();
-        immutable rhs = operands.front;
-
-        immutable sum = lhs + rhs;
-        immutable sumRef = Binary32(lhs.value + rhs.value);
-
-        if (sum.isNaN)
-        {
-            assert(sumRef.isNaN);
-        }
-        else
-        {
-            import std.format : format;
-
-            assert(sum.value == sumRef.value, format!"%a + %a = %a, %a"(lhs.value,
-                    rhs.value, sum.value, sumRef.value) ~ "\n" ~ format!"%s\n%s\n%s\n%s"(lhs,
-                    rhs, sum, sumRef));
-        }
-    }
-}
-
-unittest
-{
-    import std.random : Mt19937;
-    import std.algorithm : map;
-    import std.range : slide, take;
-
-    union FloatContainer
-    {
-        uint i;
-        float f;
-    }
-
-    auto testcases = Mt19937(9).map!(a => FloatContainer(a).f)
-        .map!(a => Binary32(a))
-        .slide(2);
-
-    foreach (operands; testcases.take(1000))
-    {
-        immutable lhs = operands.front;
-        operands.popFront();
-        immutable rhs = operands.front;
-
-        immutable diff = lhs - rhs;
-        immutable diffRef = Binary32(lhs.value - rhs.value);
-
-        if (diff.isNaN)
-        {
-            assert(diffRef.isNaN);
-        }
-        else
-        {
-            import std.format : format;
-
-            assert(diff.value == diffRef.value, format!"%a - %a = %a, %a"(lhs.value,
-                    rhs.value, diff.value, diffRef.value) ~ "\n" ~ format!"%s\n%s\n%s\n%s"(lhs,
-                    rhs, diff, diffRef));
-        }
-    }
 }
 
 unittest
