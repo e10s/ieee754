@@ -373,6 +373,33 @@ struct Binary32
     }
 
     ///
+    @safe pure nothrow @nogc unittest
+    {
+        assert(isNaN(Binary32.nan * Binary32(1.0)));
+        assert(isNaN(Binary32(1.0) * Binary32.nan));
+
+        assert(isNaN(Binary32.infinity * Binary32.zero));
+
+        assert(Binary32.infinity * -Binary32.infinity == -Binary32.infinity);
+
+        assert(isIdentical(Binary32.zero * Binary32(-1.0), -Binary32.zero));
+
+        assert(Binary32(3.14) * Binary32(-1.0) == -Binary32(3.14));
+        assert(Binary32(3.14) * Binary32(2.72) == Binary32(3.14f * 2.72f));
+        assert(Binary32(float.min_normal / 4) * Binary32(-1.0) == -Binary32(float.min_normal / 4));
+
+        // overflow
+        assert(Binary32(2.0) * Binary32.max == Binary32.infinity);
+
+        // underflow
+        assert(isIdentical(Binary32(float.min_normal) * -Binary32(float.min_normal / 2),
+                -Binary32.zero));
+
+        // overflow after rounding
+        assert(Binary32(0x1.46f6d8p+125) * Binary32(0x1.90e02ap+2) == Binary32.infinity);
+    }
+
+    ///
     Binary32 opBinary(string op)(Binary32 rhs) const if (op == "/")
     {
         immutable lhs = this;
@@ -651,46 +678,6 @@ unittest
     auto testcases = Mt19937().map!(a => FloatContainer(a).f)
         .map!(a => Binary32(a))
         .slide(2);
-
-    foreach (operands; testcases.take(1000))
-    {
-        immutable lhs = operands.front;
-        operands.popFront();
-        immutable rhs = operands.front;
-
-        immutable prod = lhs * rhs;
-        immutable prodRef = Binary32(lhs.value * rhs.value);
-
-        if (prod.isNaN)
-        {
-            assert(prodRef.isNaN);
-        }
-        else
-        {
-            import std.format : format;
-
-            assert(prod.value == prodRef.value, format!"%a * %a = %a, %a"(lhs.value,
-                    rhs.value, prod.value, prodRef.value));
-        }
-    }
-}
-
-unittest
-{
-    import std.random : Mt19937;
-    import std.algorithm : map;
-    import std.range : slide, take;
-
-    union FloatContainer
-    {
-        uint i;
-        float f;
-    }
-
-    auto testcases = Mt19937().map!(a => FloatContainer(a).f)
-        .map!(a => Binary32(a))
-        .slide(2);
-
     foreach (operands; testcases.take(1000))
     {
         immutable lhs = operands.front;
@@ -712,20 +699,4 @@ unittest
                     rhs.value, quot.value, quotRef.value));
         }
     }
-}
-
-unittest
-{
-    assert((Binary32.zero * Binary32.infinity).isNaN);
-    auto f = Binary32(-11.2);
-    assert((Binary32.zero * f).isZero);
-    assert((f * Binary32.infinity).isInfinity);
-}
-
-// Overflow after rounding
-unittest
-{
-    auto f = Binary32(0x1.46f6d8p+125);
-    auto g = Binary32(0x1.90e02ap+2);
-    assert((f * g).isInfinity);
 }
