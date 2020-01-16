@@ -496,6 +496,27 @@ struct Binary32
     }
 
     ///
+    @safe pure nothrow @nogc unittest
+    {
+        assert(isNaN(Binary32.nan / Binary32(2.0)));
+        assert(isNaN(Binary32(2.0) / Binary32.nan));
+
+        assert(isNaN(Binary32.zero / Binary32.zero));
+        assert(isNaN(Binary32.infinity / Binary32.infinity));
+        assert(Binary32.infinity / Binary32(1.0) == Binary32.infinity);
+        assert(Binary32.infinity / -Binary32.zero == -Binary32.infinity);
+
+        assert(isIdentical(Binary32(2.0) / -Binary32.infinity, -Binary32.zero));
+        assert(Binary32(5.0) / Binary32(3.0) == Binary32(5.0f / 3.0f));
+
+        // overflow
+        assert(Binary32.max / Binary32(float.min_normal / 6) == Binary32.infinity);
+
+        // underflow
+        assert(isIdentical(Binary32(float.min_normal / 6) / -Binary32.max, -Binary32.zero));
+    }
+
+    ///
     bool opEquals()(auto ref const Binary32 x) const pure nothrow @nogc @safe
     {
         if (this.isZero && x.isZero)
@@ -661,42 +682,4 @@ package Binary32 _rounder(bool sign, int exponent, uint mantissa) pure nothrow @
 
     r.round();
     return r.result;
-}
-
-unittest
-{
-    import std.random : Mt19937;
-    import std.algorithm : map;
-    import std.range : slide, take;
-
-    union FloatContainer
-    {
-        uint i;
-        float f;
-    }
-
-    auto testcases = Mt19937().map!(a => FloatContainer(a).f)
-        .map!(a => Binary32(a))
-        .slide(2);
-    foreach (operands; testcases.take(1000))
-    {
-        immutable lhs = operands.front;
-        operands.popFront();
-        immutable rhs = operands.front;
-
-        immutable quot = lhs / rhs;
-        immutable quotRef = Binary32(lhs.value / rhs.value);
-
-        if (quot.isNaN)
-        {
-            assert(quotRef.isNaN);
-        }
-        else
-        {
-            import std.format : format;
-
-            assert(quot.value == quotRef.value, format!"%a / %a = %a, %a"(lhs.value,
-                    rhs.value, quot.value, quotRef.value));
-        }
-    }
 }
