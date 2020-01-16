@@ -128,6 +128,18 @@ struct Binary32
     }
 
     ///
+    @safe pure nothrow @nogc unittest
+    {
+        immutable a = Binary32(3.14);
+        immutable b = Binary32(-3.14);
+
+        assert(+a == a);
+        assert(+b == b);
+        assert(-a == b);
+        assert(-b == a);
+    }
+
+    ///
     Binary32 opBinary(string op)(Binary32 rhs) const if (op == "+" || op == "-")
     {
         immutable lhs = this;
@@ -591,17 +603,6 @@ package Binary32 _rounder(bool sign, int exponent, uint mantissa) pure nothrow @
 
     r.round();
     return r.result;
-}
-
-unittest
-{
-    auto a = Binary32(3.14);
-    auto b = Binary32(-3.14);
-
-    assert((+a).value == a.value);
-    assert((+b).value == b.value);
-    assert((-a).value == b.value);
-    assert((-b).value == a.value);
 }
 
 unittest
