@@ -195,6 +195,11 @@ struct Binary32
         immutable lhsMagnitude = (lhs.exponent << fractionBits) | lhs.fraction;
         immutable rhsMagnitude = (rhs.exponent << fractionBits) | rhs.fraction;
 
+        if (lhs.sign != rhs.sign && lhsMagnitude == rhsMagnitude)
+        {
+            return zero;
+        }
+
         immutable larger = lhsMagnitude > rhsMagnitude ? lhs : rhs;
         immutable smaller = larger == lhs ? rhs : lhs;
 
@@ -248,6 +253,8 @@ struct Binary32
     ///
     @safe pure nothrow @nogc unittest
     {
+        assert(isIdentical(Binary32(-1.0) + Binary32(1.0), Binary32.zero));
+
         assert(isNaN(Binary32.nan + Binary32(1.0)));
         assert(isNaN(Binary32(1.0) - Binary32.nan));
         assert(isNaN(Binary32.infinity - Binary32.infinity));
