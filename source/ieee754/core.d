@@ -517,6 +517,28 @@ struct Binary32
     }
 
     ///
+    Binary32 opOpAssign(string op)(Binary32 rhs)
+            if (op == "+" || op == "-" || op == "*" || op == "/")
+    {
+        this = opBinary!op(rhs);
+        return this;
+    }
+
+    @safe pure nothrow @nogc unittest
+    {
+        auto a = Binary32(4.0);
+        auto b = Binary32(2.0);
+        b += b;
+        assert(b == a);
+        a -= b;
+        assert(a.isZero);
+        b *= a;
+        assert(b.isZero);
+        a /= b;
+        assert(a.isNaN);
+    }
+
+    ///
     bool opEquals()(auto ref const Binary32 x) const pure nothrow @nogc @safe
     {
         if (this.isZero && x.isZero)

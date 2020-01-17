@@ -265,7 +265,7 @@ bool isSubnormal(Binary32 x) pure nothrow @nogc @safe
 ///
 @safe pure nothrow @nogc unittest
 {
-    for (auto f = Binary32(1.0); !isSubnormal(f); f = f / Binary32(2)) // TODO: use opAssign
+    for (auto f = Binary32(1.0); !isSubnormal(f); f /= Binary32(2))
     {
         assert(!isZero(f));
     }
