@@ -574,6 +574,161 @@ struct Binary32
                 exponentBits, fractionBits);
         return format!fmt(sign, exponent, fraction);
     }
+
+    import std.format : FormatSpec;
+
+    ///
+    void toString(scope void delegate(const(char)[]) sink, FormatSpec!char fmt) const
+    {
+        import std.array : appender;
+
+        auto result = appender!string;
+
+        if (fmt.spec == 'A' || fmt.spec == 'a')
+        {
+            if (sign)
+            {
+                result ~= '-';
+            }
+            else if (fmt.flPlus)
+            {
+                result ~= '+';
+            }
+            else if (fmt.flSpace)
+            {
+                result ~= ' ';
+            }
+
+            if (isNaN(this) || isInfinity(this))
+            {
+                result ~= isNaN(this) ? "nan" : "inf";
+
+                if (fmt.flDash && fmt.width > result.data.length)
+                {
+                    import std.range : repeat;
+
+                    result ~= repeat(' ', fmt.width - result.data.length);
+                }
+            }
+            else
+            {
+                immutable integerPart = isNormal(this) ? 1U << fractionBits : 0;
+                auto mantissa = (integerPart | fraction) << 3;
+
+                immutable resultFractionBits = fmt.precision < 6 ? fmt.precision * 4 : fractionBits;
+
+                roundImpl(sign, mantissa, resultFractionBits);
+
+                immutable roundedInt = mantissa >>> fractionBits + 3;
+                enum fractionMask = (1U << fractionBits + 3) - 1;
+                immutable roundedFrac24 = (mantissa & fractionMask) >> 2;
+
+                immutable hexPrefix = "0x";
+                immutable point = ".";
+
+                import std.algorithm : stripRight;
+                import std.conv : toChars;
+                import std.format : format;
+                import std.range : chain, repeat, takeExactly;
+
+                auto hexInt = toChars!16(roundedInt);
+                auto hexFracShortest = format!"%06x"(roundedFrac24).stripRight('0');
+
+                immutable hexFracDesiredLength = fmt.precision == fmt.UNSPECIFIED
+                    ? hexFracShortest.length : fmt.precision;
+
+                result ~= hexPrefix;
+
+                auto result2 = appender!string;
+                result2 ~= hexInt;
+
+                if (fmt.flHash || hexFracDesiredLength)
+                {
+                    result2 ~= point;
+                }
+
+                if (hexFracDesiredLength)
+                {
+                    result2 ~= hexFracShortest.chain(repeat('0')).takeExactly(hexFracDesiredLength);
+                }
+
+                immutable decExp = isNormal(this) ? cast(int) exponent - int(bias) : isSubnormal(this)
+                    ? 1 - int(bias) : 0;
+                result2 ~= format!"p%+d"(decExp);
+
+                immutable currentLength = result.data.length + result2.data.length;
+                if (fmt.width > currentLength)
+                {
+                    if (fmt.flDash)
+                    {
+                        result2 ~= repeat(' ', fmt.width - currentLength);
+                    }
+                    else if (fmt.flZero)
+                    {
+                        result ~= repeat('0', fmt.width - currentLength);
+                    }
+                }
+
+                result ~= result2.data;
+            }
+        }
+        else
+        {
+            throw new Exception("Unknown format specifier: %" ~ fmt.spec);
+        }
+
+        import std.range : put;
+
+        if (fmt.width > result.data.length)
+        {
+            import std.range : repeat;
+
+            sink.put(repeat(' ', fmt.width - result.data.length));
+        }
+
+        if (fmt.spec == 'A')
+        {
+            import std.uni : toUpper;
+
+            sink.put(result.data.toUpper);
+
+        }
+        else
+        {
+            sink.put(result.data);
+        }
+    }
+
+    unittest // TODO: simplify
+    {
+        import std.random : Mt19937;
+        import std.algorithm : map;
+        import std.range : take;
+
+        union FloatContainer
+        {
+            uint i;
+            float f;
+        }
+
+        auto testcases = Mt19937().map!(a => FloatContainer(a).f)
+            .map!(a => Binary32(a));
+
+        foreach (a; testcases.take(1000))
+        {
+            import std.format : format;
+
+            immutable fmts = [
+                "% 1a", "%a", "%+.5a", "%.4a", "% -.3a", "%+ .2a", "%.1a",
+                "%-#010.0a", "%#A", "%03.7a", "%-17.9a", "%-020a", "%030.a"
+            ];
+            foreach (fmt; fmts)
+            {
+                assert(format(fmt, a) == format(fmt, a.value),
+                        fmt ~ "@@" ~ format(fmt, a) ~ "@@" ~ format(fmt, a.value));
+            }
+        }
+    }
 }
 
 private struct _RounderImpl
@@ -645,14 +800,9 @@ private struct _RounderImpl
         return (mantissa >>> 3) & fracMask;
     }
 
-    void round() pure nothrow @nogc @safe // round to nearest even (RN)
+    void round() pure nothrow @nogc @safe
     {
-        immutable ulp_r_s = mantissa & 0b1011;
-        immutable g = mantissa & 0b100;
-        immutable roundUp = g && ulp_r_s; // something magic
-        mantissa >>>= 3;
-        mantissa += roundUp;
-        mantissa <<= 3;
+        roundImpl(sign, mantissa, Binary32.fractionBits);
 
         if (integerPart > 1)
         {
@@ -691,6 +841,30 @@ private struct _RounderImpl
                 Binary32.exponentBits, 2, Binary32.fractionBits, 3);
         return format!fmt(exponent, integerPart, fractionPart, mantissa & 0b111);
     }
+}
+
+// TODO: Implement more rounding rules
+private void roundImpl(bool sign, ref uint q26, uint resultFractionBits) pure nothrow @nogc @safe
+in
+{
+    assert(resultFractionBits <= Binary32.fractionBits);
+}
+out
+{
+    immutable shift = Binary32.fractionBits - resultFractionBits;
+    assert((q26 >>> shift) << shift == q26);
+}
+do
+{
+    // round to nearest even (RN)
+    immutable shift = Binary32.fractionBits - resultFractionBits;
+
+    immutable ulp_r_s = q26 & ((0b1011 << shift) | ((1U << shift) - 1));
+    immutable g = q26 & (0b100 << shift);
+    immutable roundUp = g && ulp_r_s; // something magic
+    q26 >>>= 3 + shift;
+    q26 += roundUp;
+    q26 <<= 3 + shift;
 }
 
 package Binary32 _rounder(bool sign, int exponent, uint mantissa) pure nothrow @nogc @safe
