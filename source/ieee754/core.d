@@ -881,7 +881,8 @@ do
         roundToInf = sign;
         break;
     case FloatingPointControl.roundUp:
-        assert(0);
+        roundToInf = !sign;
+        break;
     case FloatingPointControl.roundToZero:
         assert(0);
     default:
@@ -928,6 +929,22 @@ nothrow @nogc @safe unittest
         assert(roundImpl(1, 0b10_10100, Binary32.fractionBits - 2) == 0b11_00000);
         assert(roundImpl(1, 0b10_100000, Binary32.fractionBits - 3) == 0b11_000000);
         assert(roundImpl(1, 0b11_100, Binary32.fractionBits) == 0b100_000);
+    }
+
+    {
+        fpctrl.rounding = FloatingPointControl.roundUp;
+
+        assert(roundImpl(0, 0b10_000, Binary32.fractionBits) == 0b10_000);
+        assert(roundImpl(0, 0b10_0100, Binary32.fractionBits - 1) == 0b11_0000);
+        assert(roundImpl(0, 0b10_10100, Binary32.fractionBits - 2) == 0b11_00000);
+        assert(roundImpl(0, 0b10_100000, Binary32.fractionBits - 3) == 0b11_000000);
+        assert(roundImpl(0, 0b11_100, Binary32.fractionBits) == 0b100_000);
+
+        assert(roundImpl(1, 0b10_000, Binary32.fractionBits) == 0b10_000);
+        assert(roundImpl(1, 0b10_0100, Binary32.fractionBits - 1) == 0b10_0000);
+        assert(roundImpl(1, 0b10_10100, Binary32.fractionBits - 2) == 0b10_00000);
+        assert(roundImpl(1, 0b10_100000, Binary32.fractionBits - 3) == 0b10_000000);
+        assert(roundImpl(1, 0b11_100, Binary32.fractionBits) == 0b11_000);
     }
 }
 
