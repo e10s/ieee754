@@ -617,7 +617,7 @@ struct Binary32
 
                 immutable resultFractionBits = fmt.precision < 6 ? fmt.precision * 4 : fractionBits;
 
-                roundImpl(sign, mantissa, resultFractionBits);
+                mantissa = roundImpl(sign, mantissa, resultFractionBits);
 
                 immutable roundedInt = mantissa >>> fractionBits + 3;
                 enum fractionMask = (1U << fractionBits + 3) - 1;
@@ -699,7 +699,7 @@ struct Binary32
         }
     }
 
-    unittest // TODO: simplify
+    unittest  // TODO: simplify
     {
         import std.random : Mt19937;
         import std.algorithm : map;
@@ -802,7 +802,7 @@ private struct _RounderImpl
 
     void round() pure nothrow @nogc @safe
     {
-        roundImpl(sign, mantissa, Binary32.fractionBits);
+        mantissa = roundImpl(sign, mantissa, Binary32.fractionBits);
 
         if (integerPart > 1)
         {
@@ -844,27 +844,64 @@ private struct _RounderImpl
 }
 
 // TODO: Implement more rounding rules
-private void roundImpl(bool sign, ref uint q26, uint resultFractionBits) pure nothrow @nogc @safe
+private uint roundImpl(bool sign, uint q26, uint resultFractionBits) pure nothrow @nogc @safe
 in
 {
     assert(resultFractionBits <= Binary32.fractionBits);
 }
-out
+out (r)
 {
     immutable shift = Binary32.fractionBits - resultFractionBits;
-    assert((q26 >>> shift) << shift == q26);
+    assert((r >>> shift) << shift == r);
 }
 do
 {
-    // round to nearest even (RN)
-    immutable shift = Binary32.fractionBits - resultFractionBits;
+    import std.math : FloatingPointControl;
 
-    immutable ulp_r_s = q26 & ((0b1011 << shift) | ((1U << shift) - 1));
-    immutable g = q26 & (0b100 << shift);
-    immutable roundUp = g && ulp_r_s; // something magic
-    q26 >>>= 3 + shift;
-    q26 += roundUp;
-    q26 <<= 3 + shift;
+    switch (FloatingPointControl.rounding)
+    {
+    case FloatingPointControl.roundToNearest:
+        immutable shift = Binary32.fractionBits - resultFractionBits;
+
+        immutable ulp_r_s = q26 & ((0b1011 << shift) | ((1U << shift) - 1));
+        immutable g = q26 & (0b100 << shift);
+        immutable roundToInf = g && ulp_r_s; // something magic
+        q26 >>>= 3 + shift;
+        q26 += roundToInf;
+        q26 <<= 3 + shift;
+        break;
+    case FloatingPointControl.roundDown:
+        assert(0);
+    case FloatingPointControl.roundUp:
+        assert(0);
+    case FloatingPointControl.roundToZero:
+        assert(0);
+    default:
+        assert(0);
+    }
+    return q26;
+}
+
+nothrow @nogc @safe unittest
+{
+    import std.math : FloatingPointControl;
+
+    pragma(inline, false);
+    FloatingPointControl fpctrl;
+
+    {
+        fpctrl.rounding = FloatingPointControl.roundToNearest;
+
+        assert(roundImpl(0, 0b10_0100, Binary32.fractionBits - 1) == 0b10_0000);
+        assert(roundImpl(0, 0b10_10100, Binary32.fractionBits - 2) == 0b11_00000);
+        assert(roundImpl(0, 0b10_100000, Binary32.fractionBits - 3) == 0b10_000000);
+        assert(roundImpl(0, 0b11_100, Binary32.fractionBits) == 0b100_000);
+
+        assert(roundImpl(1, 0b10_0100, Binary32.fractionBits - 1) == 0b10_0000);
+        assert(roundImpl(1, 0b10_10100, Binary32.fractionBits - 2) == 0b11_00000);
+        assert(roundImpl(1, 0b10_100000, Binary32.fractionBits - 3) == 0b10_000000);
+        assert(roundImpl(1, 0b11_100, Binary32.fractionBits) == 0b100_000);
+    }
 }
 
 package Binary32 _rounder(bool sign, int exponent, uint mantissa) pure nothrow @nogc @safe
