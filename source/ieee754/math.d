@@ -143,6 +143,30 @@ pure nothrow @nogc @safe unittest
 }
 
 ///
+Binary32 nextUp(Binary32 x) pure nothrow @nogc @safe
+{
+    if (x == -Binary32.infinity)
+    {
+        return -Binary32.max;
+    }
+
+    return x + ulp(x);
+}
+
+///
+pure nothrow @nogc @safe unittest
+{
+    assert(isNaN(nextUp(Binary32.init)));
+
+    assert(nextUp(-Binary32.infinity) == -Binary32.max);
+    assert(nextUp(-Binary32.zero) == Binary32.min_normal * Binary32.epsilon);
+    assert(nextUp(Binary32.max) == Binary32.infinity);
+    assert(nextUp(Binary32.infinity) == Binary32.infinity);
+
+    assert(nextUp(Binary32(1.0)) == Binary32(1.0) + Binary32.epsilon);
+}
+
+///
 Binary32 ulp(Binary32 x) pure nothrow @nogc @safe
 {
     if (isNaN(x))
