@@ -115,6 +115,39 @@ Binary32 sqrt(Binary32 x) pure nothrow @nogc @safe
     immutable small = Binary32.min_normal / Binary32(7.0);
     assert(sqrt(small) == Binary32(std.math.sqrt(small.value)));
 }
+
+//---------------------------
+
+///
+Binary32 ulp(Binary32 x) pure nothrow @nogc @safe
+{
+    if (isNaN(x))
+    {
+        return x;
+    }
+
+    if (isInfinity(x))
+    {
+        return Binary32.infinity;
+    }
+
+    if (isZero(x) || isSubnormal(x))
+    {
+        return Binary32(0, 0, 1);
+    }
+
+    return Binary32(0, x.exponent, 0) * Binary32.epsilon;
+}
+
+///
+pure nothrow @nogc @safe unittest
+{
+    assert(isNaN(ulp(Binary32.nan)));
+    assert(ulp(-Binary32.infinity) == Binary32.infinity);
+    assert(ulp(Binary32.zero) == Binary32.min_normal * Binary32.epsilon);
+    assert(ulp(-Binary32(1.0)) == Binary32.epsilon);
+}
+
 //---------------------------
 
 ///
@@ -146,7 +179,6 @@ bool isIdentical(Binary32 x, Binary32 y) pure nothrow @nogc @safe
     assert(isIdentical(Binary32(1.0), Binary32(1.0)));
     assert(isIdentical(Binary32.infinity, Binary32.infinity));
     assert(isIdentical(-Binary32.infinity, -Binary32.infinity));
-
     assert(!isIdentical(Binary32.zero, -Binary32.zero));
     assert(!isIdentical(Binary32.nan, -Binary32.nan));
     assert(!isIdentical(Binary32.infinity, -Binary32.infinity));
@@ -199,7 +231,6 @@ bool isNormal(Binary32 x) pure nothrow @nogc @safe
     immutable f = Binary32(3);
     immutable d = Binary32(500);
     immutable e = Binary32(10e+35);
-
     assert(isNormal(f));
     assert(isNormal(d));
     assert(isNormal(e));
@@ -242,7 +273,6 @@ bool isPowerOf2(Binary32 x) pure nothrow @nogc @safe
     assert(isPowerOf2(Binary32(0.5)));
     assert(isPowerOf2(Binary32(std.math.pow(2.0L, 96))));
     assert(isPowerOf2(Binary32(std.math.pow(2.0L, -77))));
-
     assert(!isPowerOf2(Binary32(-2.0)));
     assert(!isPowerOf2(Binary32(-0.5)));
     assert(!isPowerOf2(Binary32.zero));
