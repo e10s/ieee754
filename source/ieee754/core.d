@@ -580,6 +580,14 @@ struct Binary32
     ///
     void toString(scope void delegate(const(char)[]) sink, FormatSpec!char fmt) const
     {
+        import std.range : put;
+
+        if (fmt.spec == 's')
+        {
+            sink.put(toString());
+            return;
+        }
+
         import std.array : appender;
 
         auto result = appender!string;
@@ -676,8 +684,6 @@ struct Binary32
         {
             throw new Exception("Unknown format specifier: %" ~ fmt.spec);
         }
-
-        import std.range : put;
 
         if (fmt.width > result.data.length)
         {
