@@ -119,6 +119,49 @@ Binary32 sqrt(Binary32 x) pure nothrow @nogc @safe
 //---------------------------
 
 ///
+int cmp(Binary32 x, Binary32 y) pure nothrow @nogc @safe
+{
+    if (x.sign != y.sign)
+    {
+        return x.sign ? -1 : 1;
+    }
+
+    immutable xMagnitude = (x.exponent << Binary32.fractionBits) | x.fraction;
+    immutable yMagnitude = (y.exponent << Binary32.fractionBits) | y.fraction;
+
+    immutable diff = (xMagnitude > yMagnitude) - (xMagnitude < yMagnitude);
+
+    return x.sign ? -diff : diff;
+}
+
+///
+pure nothrow @nogc @safe unittest
+{
+    assert(cmp(-Binary32.infinity, -Binary32.max) < 0);
+    assert(cmp(-Binary32.max, Binary32(-100.0)) < 0);
+    assert(cmp(Binary32(-100.0), Binary32(-0.5)) < 0);
+    assert(cmp(Binary32(-0.5), Binary32(0.0)) < 0);
+    assert(cmp(Binary32(0.0), Binary32(0.5)) < 0);
+    assert(cmp(Binary32(0.5), Binary32(100.0)) < 0);
+    assert(cmp(Binary32(100.0), Binary32.max) < 0);
+    assert(cmp(Binary32.max, Binary32.infinity) < 0);
+
+    assert(cmp(Binary32(1.0), Binary32(1.0)) == 0);
+
+    assert(cmp(Binary32(-0.0), Binary32(+0.0)) < 0);
+    assert(cmp(Binary32(+0.0), Binary32(-0.0)) > 0);
+
+    assert(cmp(-Binary32.nan, -Binary32.infinity) < 0);
+    assert(cmp(Binary32.infinity, Binary32.nan) < 0);
+    assert(cmp(-Binary32.nan, Binary32.nan) < 0);
+
+    import std.math : NaN;
+
+    assert(cmp(Binary32(NaN(10)), Binary32(NaN(20))) < 0);
+    assert(cmp(Binary32(-NaN(20)), Binary32(-NaN(10))) < 0);
+}
+
+///
 Binary32 nextDown(Binary32 x) pure nothrow @nogc @safe
 {
     if (x == Binary32.infinity)
