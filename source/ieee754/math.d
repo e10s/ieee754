@@ -160,6 +160,23 @@ pure nothrow @nogc @safe unittest
 }
 
 ///
+ulong getNaNPayload(Binary32 x) pure nothrow @nogc @safe
+{
+    enum qNaNBit = 1U << (Binary32.fractionBits - 1);
+    enum payloadMask = qNaNBit - 1;
+
+    return x.fraction & payloadMask;
+}
+
+///
+pure nothrow @nogc @safe unittest
+{
+    auto a = NaN(1_000_000);
+    assert(isNaN(a));
+    assert(getNaNPayload(a) == 1_000_000);
+}
+
+///
 Binary32 NaN(ulong payload) pure nothrow @nogc @safe
 {
     enum qNaNBit = 1U << (Binary32.fractionBits - 1);
@@ -173,10 +190,7 @@ pure nothrow @nogc @safe unittest
 {
     auto a = NaN(1_000_000);
     assert(isNaN(a));
-
-    import std.math : getNaNPayload;
-
-    assert(getNaNPayload(a.value) == 1_000_000);
+    assert(getNaNPayload(a) == 1_000_000);
 }
 
 ///
