@@ -1,6 +1,6 @@
 module ieee754.math;
 
-import ieee754.core : Binary32;
+import ieee754.type : Binary32;
 
 ///
 Binary32 fabs(Binary32 x) pure nothrow @nogc @safe
