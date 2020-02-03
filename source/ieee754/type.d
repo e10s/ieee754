@@ -265,6 +265,13 @@ struct Binary32
             return -nan; // Why -???
         }
 
+        if (lhs.isInfinity || rhs.isInfinity)
+        {
+            auto inf = Binary32.infinity;
+            inf.sign = lhs.sign ^ rhs.sign;
+            return inf;
+        }
+
         return mul(lhs, rhs);
     }
 

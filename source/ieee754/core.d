@@ -63,41 +63,22 @@ package Binary32 add(Binary32 lhs, Binary32 rhs) pure nothrow @nogc @safe
 }
 
 package Binary32 mul(Binary32 lhs, Binary32 rhs) pure nothrow @nogc @safe
+in(isFinite(lhs))
+in(isFinite(rhs))
 {
-    immutable prodSign = lhs.sign ^ rhs.sign;
-
-    if (lhs.isZero || rhs.isZero)
-    {
-        auto z = Binary32.zero;
-        z.sign = prodSign;
-        return z;
-    }
-
-    if (lhs.isInfinity || rhs.isInfinity)
-    {
-        auto inf = Binary32.infinity;
-        inf.sign = prodSign;
-        return inf;
-    }
-
     immutable lhs2 = Fixed!Binary32(lhs);
     immutable rhs2 = Fixed!Binary32(rhs);
 
-    immutable prodExponent = lhs2.exponentUnbiased + rhs2.exponentUnbiased + Binary32.bias;
+    immutable prodSign = lhs2.sign ^ rhs2.sign;
+    immutable prodExponent = lhs2.exponentUnbiased + rhs2.exponentUnbiased;
 
     // [padding][integer: 2].[fraction: fractionBits][extra: fractionBits]
-    ulong prodMantissa = cast(ulong) lhs2.mantissaNormalized * cast(ulong) rhs2.mantissaNormalized;
-    immutable extraMask = (1UL << Fixed!Binary32.fractionBits) - 1;
-    immutable hasExtra = cast(bool) prodMantissa & extraMask;
-    prodMantissa >>>= Fixed!Binary32.fractionBits;
+    immutable p = cast(ulong) lhs2.mantissa * cast(ulong) rhs2.mantissa;
+    enum extraMask = (1UL << Fixed!Binary32.fractionBits) - 1;
+    immutable stickyBit = cast(bool)(p & extraMask);
+    immutable prodMantissa = cast(uint)(p >>> Fixed!Binary32.fractionBits) | stickyBit;
 
-    if (hasExtra)
-    {
-        prodMantissa |= 1;
-    }
-
-    // [padding][integer: 2].[fraction: fractionBits]
-    return _rounder(prodSign, prodExponent, cast(uint) prodMantissa);
+    return round(Fixed!Binary32(prodSign, prodExponent, prodMantissa));
 }
 
 package Binary32 div(Binary32 lhs, Binary32 rhs) pure nothrow @nogc @safe
@@ -185,7 +166,7 @@ private struct Fixed(Float)
 
     bool sign;
     int exponentUnbiased;
-    MantType mantissaNormalized;
+    MantType mantissa;
 
     enum grsBits = 3;
     enum fractionBits = Float.fractionBits + grsBits;
@@ -202,14 +183,27 @@ private struct Fixed(Float)
         immutable isNormal = cast(bool) value.exponent;
         exponentUnbiased = isNormal ? value.exponent : 1;
         exponentUnbiased -= int(Float.bias);
-        mantissaNormalized = value.fraction << 3;
+        mantissa = value.fraction << 3;
 
         if (isNormal)
         {
-            mantissaNormalized |= integerBit;
+            mantissa |= integerBit;
         }
 
         normalize();
+    }
+
+    // store as is
+    this(bool sign, int exponentUnbiased, MantType mantissa) pure nothrow @nogc @safe
+    {
+        this.sign = sign;
+        this.exponentUnbiased = exponentUnbiased;
+        this.mantissa = mantissa;
+    }
+
+    int exponentBiased() const pure nothrow @nogc @safe @property
+    {
+        return exponentUnbiased + Float.bias;
     }
 
     void normalize() pure nothrow @nogc @safe
@@ -227,9 +221,19 @@ private struct Fixed(Float)
             shiftMantissaToRight(1);
         }
 
-        if (!mantissaNormalized)
+        if (!mantissa)
         {
-            exponentUnbiased = 0;
+            exponentUnbiased = 1 - int(Float.bias);
+        }
+    }
+
+    void subnormalize()
+    {
+        if (exponentBiased < 1)
+        {
+            immutable shift = 1 - exponentBiased;
+            shiftMantissaToRight(shift);
+            assert(exponentBiased == 1);
         }
     }
 
@@ -239,7 +243,7 @@ private struct Fixed(Float)
 
         foreach (_; 0 .. shift)
         {
-            mantissaNormalized <<= 1;
+            mantissa <<= 1;
         }
     }
 
@@ -249,21 +253,39 @@ private struct Fixed(Float)
 
         foreach (_; 0 .. shift)
         {
-            immutable stickyBit = mantissaNormalized & 1;
-            mantissaNormalized >>>= 1;
-            mantissaNormalized |= stickyBit;
+            immutable stickyBit = mantissa & 1;
+            mantissa >>>= 1;
+            mantissa |= stickyBit;
         }
     }
 
     MantType integerPart() const pure nothrow @nogc @safe @property
     {
-        return mantissaNormalized >>> fractionBits;
+        return mantissa >>> fractionBits;
     }
 
     MantType fractionPart() const pure nothrow @nogc @safe @property
     {
         enum fracMask = integerBit - 1;
-        return mantissaNormalized & fracMask;
+        return mantissa & fracMask;
+    }
+
+    bool overflow() const pure nothrow @nogc @safe @property
+    {
+        return exponentBiased > 0xFE;
+    }
+
+    bool underflow() const pure nothrow @nogc @safe @property
+    {
+        return exponentBiased <= 1 && !integerPart;
+    }
+
+    string toString() const pure @safe
+    {
+        import std.format : format;
+
+        immutable fmt = format!"expUB: %%s, int: %%b, frac: %%0%sb"(Float.fractionBits);
+        return format!fmt(exponentUnbiased, integerPart, fractionPart);
     }
 }
 
@@ -271,18 +293,56 @@ pure nothrow @nogc @safe unittest
 {
     immutable z = Fixed!Binary32(Binary32(-0.0));
     assert(z.sign == 1);
-    assert(z.exponentUnbiased == 0);
-    assert(z.mantissaNormalized == 0);
+    assert(z.exponentBiased == 1);
+    assert(z.mantissa == 0);
 
     immutable a = Fixed!Binary32(Binary32(3.1415927));
     assert(a.sign == 0);
     assert(a.exponentUnbiased == 1);
-    assert(a.mantissaNormalized == 0b1_100_1001_0000_1111_1101_1011_000);
+    assert(a.mantissa == 0b1_100_1001_0000_1111_1101_1011_000);
 
     immutable b = Fixed!Binary32(-Binary32(float.min_normal / 2));
     assert(b.sign == 1);
     assert(b.exponentUnbiased == -126 - 1);
-    assert(b.mantissaNormalized == 1 << 26);
+    assert(b.mantissa == 1 << 26);
+
+    auto c = Fixed!Binary32(Binary32(float.min_normal / 4));
+    assert(c.sign == 0);
+    assert(c.exponentUnbiased == -126 - 2);
+    assert(c.mantissa == 1 << c.fractionBits);
+    c.subnormalize();
+    assert(c.exponentUnbiased == -126);
+    assert(c.mantissa == 1 << 24);
+    c.normalize();
+    assert(c.exponentUnbiased == -126 - 2);
+    assert(c.mantissa == 1 << c.fractionBits);
+}
+
+private Float round(Float)(Fixed!Float r) pure nothrow @nogc @safe @property
+{
+    alias ExpType = typeof(Float.exponent);
+    r.normalize();
+    r.subnormalize();
+
+    if (r.overflow) // unrecoverable
+    {
+        return r.sign ? -Float.infinity : Float.infinity;
+    }
+
+    r.mantissa = roundImpl(r.sign, r.mantissa, Float.fractionBits);
+
+    r.normalize();
+    r.subnormalize();
+
+    if (r.overflow)
+    {
+        return r.sign ? -Float.infinity : Float.infinity;
+    }
+
+    assert(r.exponentBiased < 0xFF);
+    assert(r.exponentBiased > 0);
+
+    return Float(r.sign, r.underflow ? 0 : cast(ExpType) r.exponentBiased, r.fractionPart >>> 3);
 }
 
 private struct _RounderImpl
