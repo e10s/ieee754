@@ -64,7 +64,6 @@ package Binary32 add(Binary32 lhs, Binary32 rhs) pure nothrow @nogc @safe
 
 package Binary32 mul(Binary32 lhs, Binary32 rhs) pure nothrow @nogc @safe
 {
-
     immutable prodSign = lhs.sign ^ rhs.sign;
 
     if (lhs.isZero || rhs.isZero)
@@ -81,64 +80,23 @@ package Binary32 mul(Binary32 lhs, Binary32 rhs) pure nothrow @nogc @safe
         return inf;
     }
 
-    int lhsExponent = lhs.exponent;
-    int rhsExponent = rhs.exponent;
-    uint lhsFraction = lhs.fraction;
-    uint rhsFraction = rhs.fraction;
+    immutable lhs2 = Fixed!Binary32(lhs);
+    immutable rhs2 = Fixed!Binary32(rhs);
 
-    // Make normal form of 1.[fraction] * 2^E from subnormal
-    void normalizeSubnormal(ref int exponent, ref uint fraction)
-    in
-    {
-        assert(!exponent); // Exponent of subnormal is 0
-    }
-    do
-    {
-        exponent = 1;
-        uint mantissa = fraction;
-
-        enum integerBit = 1U << Binary32.fractionBits;
-        enum fracMask = integerBit - 1;
-        foreach (_; 0 .. Binary32.fractionBits)
-        {
-            exponent--;
-            mantissa <<= 1;
-
-            if (mantissa & integerBit)
-            {
-                break;
-            }
-        }
-
-        fraction = mantissa & fracMask;
-    }
-
-    if (!lhsExponent) // lhs is subnormal
-    {
-        normalizeSubnormal(lhsExponent, lhsFraction);
-    }
-
-    if (!rhsExponent) // rhs is subnormal
-    {
-        normalizeSubnormal(rhsExponent, rhsFraction);
-    }
-
-    int prodExponent = lhsExponent + rhsExponent - cast(int) Binary32.bias;
-
-    enum implicitLeadingBit = 1UL << Binary32.fractionBits;
-    immutable ulong lhsMantissa = implicitLeadingBit | lhsFraction;
-    immutable ulong rhsMantissa = implicitLeadingBit | rhsFraction;
+    immutable prodExponent = lhs2.exponentUnbiased + rhs2.exponentUnbiased + Binary32.bias;
 
     // [padding][integer: 2].[fraction: fractionBits][extra: fractionBits]
-    ulong prodMantissa = lhsMantissa * rhsMantissa;
-    foreach (_; 0 .. Binary32.fractionBits - 3)
-    {
-        immutable stickyBit = prodMantissa & 1;
-        prodMantissa >>>= 1;
-        prodMantissa |= stickyBit;
-    }
-    // [padding][integer: 2].[fraction: fractionBits][GRS: 3]
+    ulong prodMantissa = cast(ulong) lhs2.mantissaNormalized * cast(ulong) rhs2.mantissaNormalized;
+    immutable extraMask = (1UL << Fixed!Binary32.fractionBits) - 1;
+    immutable hasExtra = cast(bool) prodMantissa & extraMask;
+    prodMantissa >>>= Fixed!Binary32.fractionBits;
 
+    if (hasExtra)
+    {
+        prodMantissa |= 1;
+    }
+
+    // [padding][integer: 2].[fraction: fractionBits]
     return _rounder(prodSign, prodExponent, cast(uint) prodMantissa);
 }
 
@@ -219,6 +177,112 @@ package Binary32 div(Binary32 lhs, Binary32 rhs) pure nothrow @nogc @safe
     assert(quotMantissa >>> (Binary32.fractionBits - 1 + 3));
 
     return _rounder(quotSign, quotExponent, cast(uint) quotMantissa);
+}
+
+private struct Fixed(Float)
+{
+    alias MantType = typeof(Float.fraction);
+
+    bool sign;
+    int exponentUnbiased;
+    MantType mantissaNormalized;
+
+    enum grsBits = 3;
+    enum fractionBits = Float.fractionBits + grsBits;
+    enum integerBit = MantType(1) << fractionBits;
+
+    this(Float value) pure nothrow @nogc @safe
+    in
+    {
+        assert(value.exponent < value.exponent.max);
+    }
+    do
+    {
+        sign = value.sign;
+        immutable isNormal = cast(bool) value.exponent;
+        exponentUnbiased = isNormal ? value.exponent : 1;
+        exponentUnbiased -= int(Float.bias);
+        mantissaNormalized = value.fraction << 3;
+
+        if (isNormal)
+        {
+            mantissaNormalized |= integerBit;
+        }
+
+        normalize();
+    }
+
+    void normalize() pure nothrow @nogc @safe
+    {
+        if (fractionPart)
+        {
+            while (!integerPart)
+            {
+                shiftMantissaToLeft(1);
+            }
+        }
+
+        while (integerPart > 1)
+        {
+            shiftMantissaToRight(1);
+        }
+
+        if (!mantissaNormalized)
+        {
+            exponentUnbiased = 0;
+        }
+    }
+
+    void shiftMantissaToLeft(size_t shift) pure nothrow @nogc @safe
+    {
+        exponentUnbiased -= cast(int) shift;
+
+        foreach (_; 0 .. shift)
+        {
+            mantissaNormalized <<= 1;
+        }
+    }
+
+    void shiftMantissaToRight(size_t shift) pure nothrow @nogc @safe
+    {
+        exponentUnbiased += cast(int) shift;
+
+        foreach (_; 0 .. shift)
+        {
+            immutable stickyBit = mantissaNormalized & 1;
+            mantissaNormalized >>>= 1;
+            mantissaNormalized |= stickyBit;
+        }
+    }
+
+    MantType integerPart() const pure nothrow @nogc @safe @property
+    {
+        return mantissaNormalized >>> fractionBits;
+    }
+
+    MantType fractionPart() const pure nothrow @nogc @safe @property
+    {
+        enum fracMask = integerBit - 1;
+        return mantissaNormalized & fracMask;
+    }
+}
+
+pure nothrow @nogc @safe unittest
+{
+    immutable z = Fixed!Binary32(Binary32(-0.0));
+    assert(z.sign == 1);
+    assert(z.exponentUnbiased == 0);
+    assert(z.mantissaNormalized == 0);
+
+    immutable a = Fixed!Binary32(Binary32(3.1415927));
+    assert(a.sign == 0);
+    assert(a.exponentUnbiased == 1);
+    assert(a.mantissaNormalized == 0b1_100_1001_0000_1111_1101_1011_000);
+
+    immutable b = Fixed!Binary32(-Binary32(float.min_normal / 2));
+    assert(b.sign == 1);
+    assert(b.exponentUnbiased == -126 - 1);
+    assert(b.mantissaNormalized == 1 << 26);
 }
 
 private struct _RounderImpl
