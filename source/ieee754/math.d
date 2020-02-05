@@ -29,52 +29,30 @@ Binary32 sqrt(Binary32 x) pure nothrow @nogc @safe
         return -Binary32.nan; // Why -???
     }
 
-    int exponent = x.exponent;
-    uint mantissa = x.fraction;
+    import ieee754.core : Fixed;
 
-    enum integerBit = 1U << Binary32.fractionBits;
-    // Make normal form of 1.[fraction] * 2^E from subnormal
-    if (!exponent) // Exponent of subnormal is 0
+    auto x2 = Fixed!Binary32(x);
+
+    if (x2.exponentUnbiased % 2)
     {
-        exponent = 1;
-
-        foreach (_; 0 .. Binary32.fractionBits)
-        {
-            exponent--;
-            mantissa <<= 1;
-
-            if (mantissa & integerBit)
-            {
-                break;
-            }
-        }
-    }
-    else
-    {
-        mantissa |= integerBit;
+        x2.shiftMantissaToLeft(1);
     }
 
-    enum int bias = cast(int) Binary32.bias;
+    assert(x2.integerPart);
+    assert(x2.integerPart < 0b111);
+    assert(x2.exponentUnbiased % 2 == 0);
 
-    if ((exponent - bias) % 2)
-    {
-        exponent--;
-        mantissa <<= 1;
-    }
+    immutable sqrtExponent = x2.exponentUnbiased / 2;
 
-    assert((exponent - bias) % 2 == 0);
+    // [padding][integer: 2].[fraction: fractionBits][margin: fractionBits]
+    immutable operandMantissa = cast(ulong) x2.mantissa << Fixed!Binary32.fractionBits;
 
-    immutable sqrtExponent = (exponent - bias) / 2 + bias;
-
-    // [padding][integer: 2].[fraction: fractionBits][margin + for G: fractionBits + 2]
-    immutable operandMantissa = cast(ulong) mantissa << (Binary32.fractionBits + 2);
-
-    // [padding][integer: 1].[fraction: fractionBits][G: 1]
+    // [padding][integer: 1].[fraction: fractionBits]
     uint sqrtMantissa;
 
     uint tempAdd, tempMulSub;
 
-    foreach_reverse (i; 0 .. (Binary32.fractionBits + 1) + 1)
+    foreach_reverse (i; 1 .. Fixed!Binary32.fractionBits + 1)
     {
         immutable twoBits = (operandMantissa >>> (i * 2)) & 0b11;
         tempMulSub <<= 2;
@@ -90,14 +68,15 @@ Binary32 sqrt(Binary32 x) pure nothrow @nogc @safe
         tempMulSub -= temp * bit;
     }
 
-    sqrtMantissa <<= 2;
-    sqrtMantissa |= cast(bool) tempMulSub << 1;
-    // [padding][integer: 1].[fraction: fractionBits][GRS: 3]
-    assert(sqrtMantissa >>> (Binary32.fractionBits + 3) == 1);
+    sqrtMantissa <<= 1;
+    sqrtMantissa |= cast(bool) tempMulSub;
 
-    import ieee754.core : _rounder;
+    // [padding][integer: 1].[fraction: fractionBits]
+    assert(sqrtMantissa >>> Fixed!Binary32.fractionBits == 1);
 
-    return _rounder(0, sqrtExponent, sqrtMantissa);
+    import ieee754.core : round;
+
+    return round(Fixed!Binary32(0, sqrtExponent, sqrtMantissa));
 }
 
 ///

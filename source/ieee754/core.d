@@ -97,7 +97,7 @@ in(isFinite(rhs))
     return round(Fixed!Binary32(quotSign, quotExponent, quotMantissa));
 }
 
-private struct Fixed(Float)
+package struct Fixed(Float)
 {
     alias MantType = typeof(Float.fraction);
 
@@ -255,7 +255,7 @@ pure nothrow @nogc @safe unittest
     assert(c.mantissa == 1 << c.fractionBits);
 }
 
-private Float round(Float)(Fixed!Float r) pure nothrow @nogc @safe @property
+package Float round(Float)(Fixed!Float r) pure nothrow @nogc @safe @property
 {
     alias ExpType = typeof(Float.exponent);
     r.normalize();
