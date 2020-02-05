@@ -82,82 +82,25 @@ in(isFinite(rhs))
 }
 
 package Binary32 div(Binary32 lhs, Binary32 rhs) pure nothrow @nogc @safe
+in(isFinite(lhs))
+in(isFinite(rhs))
 {
-    immutable quotSign = lhs.sign ^ rhs.sign;
+    immutable lhs2 = Fixed!Binary32(lhs);
+    immutable rhs2 = Fixed!Binary32(rhs);
 
-    if (lhs.isZero || rhs.isInfinity)
-    {
-        auto z = Binary32.zero;
-        z.sign = quotSign;
-        return z;
-    }
+    immutable quotSign = lhs2.sign ^ rhs2.sign;
+    immutable quotExponent = lhs2.exponentUnbiased - rhs2.exponentUnbiased;
 
-    if (lhs.isInfinity || rhs.isZero)
-    {
-        auto inf = Binary32.infinity;
-        inf.sign = quotSign;
-        return inf;
-    }
+    // [padding][integer: 1].[fraction: fractionBits][margin: fractionBits]
+    immutable dividend = cast(ulong) lhs2.mantissa << Fixed!Binary32.fractionBits;
 
-    int lhsExponent = lhs.exponent;
-    int rhsExponent = rhs.exponent;
-    uint lhsFraction = lhs.fraction;
-    uint rhsFraction = rhs.fraction;
+    // [padding][integer: 1].[fraction: fractionBits]
+    immutable q = dividend / rhs2.mantissa;
+    immutable stickyBit = dividend != q * rhs2.mantissa;
+    immutable quotMantissa = cast(uint) q | stickyBit;
+    assert(quotMantissa >>> (Fixed!Binary32.fractionBits - 1));
 
-    // Make normal form of 1.[fraction] * 2^E from subnormal
-    void normalizeSubnormal(ref int exponent, ref uint fraction)
-    in
-    {
-        assert(!exponent); // Exponent of subnormal is 0
-    }
-    do
-    {
-        exponent = 1;
-        uint mantissa = fraction;
-
-        enum integerBit = 1U << Binary32.fractionBits;
-        enum fracMask = integerBit - 1;
-        foreach (_; 0 .. Binary32.fractionBits)
-        {
-            exponent--;
-            mantissa <<= 1;
-
-            if (mantissa & integerBit)
-            {
-                break;
-            }
-        }
-
-        fraction = mantissa & fracMask;
-    }
-
-    if (!lhsExponent) // lhs is subnormal
-    {
-        normalizeSubnormal(lhsExponent, lhsFraction);
-    }
-
-    if (!rhsExponent) // rhs is subnormal
-    {
-        normalizeSubnormal(rhsExponent, rhsFraction);
-    }
-
-    immutable quotExponent = lhsExponent - rhsExponent + Binary32.bias;
-
-    enum implicitLeadingBit = 1U << Binary32.fractionBits;
-    immutable lhsMantissa = implicitLeadingBit | lhsFraction;
-    immutable rhsMantissa = implicitLeadingBit | rhsFraction;
-
-    // [padding][integer: 1].[fraction: fractionBits][margin: fractionBits][margin for GRS: 3]
-    immutable dividend = cast(ulong) lhsMantissa << (Binary32.fractionBits + 3);
-
-    // [padding][integer: 1].[fraction: fractionBits][GRS: 3]
-    ulong quotMantissa = dividend / rhsMantissa;
-
-    immutable stickyBit = dividend != quotMantissa * rhsMantissa;
-    quotMantissa |= stickyBit;
-    assert(quotMantissa >>> (Binary32.fractionBits - 1 + 3));
-
-    return _rounder(quotSign, quotExponent, cast(uint) quotMantissa);
+    return round(Fixed!Binary32(quotSign, quotExponent, quotMantissa));
 }
 
 private struct Fixed(Float)

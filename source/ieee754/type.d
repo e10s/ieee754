@@ -327,6 +327,20 @@ struct Binary32
             return -nan; // Why -???
         }
 
+        if (isZero(lhs) || isInfinity(rhs))
+        {
+            auto z = Binary32.zero;
+            z.sign = lhs.sign ^ rhs.sign;
+            return z;
+        }
+
+        if (isInfinity(lhs) || isZero(rhs))
+        {
+            auto inf = Binary32.infinity;
+            inf.sign = lhs.sign ^ rhs.sign;
+            return inf;
+        }
+
         return div(lhs, rhs);
     }
 
