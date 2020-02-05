@@ -3,63 +3,57 @@ module ieee754.core;
 import ieee754.type, ieee754.math;
 
 package Binary32 add(Binary32 lhs, Binary32 rhs) pure nothrow @nogc @safe
+in(isFinite(lhs))
+in(isFinite(rhs))
 {
-    immutable lhsMagnitude = (lhs.exponent << Binary32.fractionBits) | lhs.fraction;
-    immutable rhsMagnitude = (rhs.exponent << Binary32.fractionBits) | rhs.fraction;
+    immutable cmpResult = cmp(fabs(lhs), fabs(rhs));
 
-    if (lhs.sign != rhs.sign && lhsMagnitude == rhsMagnitude)
-    {
-        return Binary32.zero;
-    }
+    immutable larger = cmpResult > 0 ? lhs : rhs;
+    immutable smaller = isIdentical(larger, lhs) ? rhs : lhs;
 
-    immutable larger = lhsMagnitude > rhsMagnitude ? lhs : rhs;
-    immutable smaller = larger == lhs ? rhs : lhs;
-
-    int largerExponent = larger.exponent;
-    int smallerExponent = smaller.exponent;
-
-    // [padding][integer: 1].[fraction: fractionBits][GRS: 3]
-    uint largerMantissa, smallerMantissa;
-
-    enum implicitLeadingBit = 1U << Binary32.fractionBits;
-    if (larger.isNormal)
-    {
-        largerMantissa = (implicitLeadingBit | larger.fraction) << 3;
-    }
-    else
-    {
-        largerExponent = 1;
-        largerMantissa = larger.fraction << 3;
-    }
-
-    if (smaller.isNormal)
-    {
-        smallerMantissa = (implicitLeadingBit | smaller.fraction) << 3;
-    }
-    else
-    {
-        smallerExponent = 1;
-        smallerMantissa = smaller.fraction << 3;
-    }
-    assert(largerExponent >= smallerExponent);
+    immutable larger2 = Fixed!Binary32(larger);
+    auto smaller2 = Fixed!Binary32(smaller);
 
     // preliminary shift
-    immutable shift = largerExponent - smallerExponent;
-    foreach (_; 0 .. shift)
+    if (smaller2.mantissa == 0)
     {
-        immutable stickyBit = smallerMantissa & 1;
-        smallerMantissa >>>= 1;
-        smallerMantissa |= stickyBit;
+        smaller2.exponentUnbiased = larger2.exponentUnbiased;
+    }
+    else
+    {
+        assert(larger2.exponentUnbiased >= smaller2.exponentUnbiased);
+
+        immutable shift = larger2.exponentUnbiased - smaller2.exponentUnbiased;
+        smaller2.shiftMantissaToRight(shift);
     }
 
-    immutable smallerSign = (larger.sign ? -1 : 1) * (smaller.sign ? -1 : 1);
-    immutable sumMantissa = largerMantissa + smallerSign * smallerMantissa;
-    assert(cast(int) sumMantissa > 0);
+    assert(larger2.exponentUnbiased == smaller2.exponentUnbiased);
+    immutable sumExponent = larger2.exponentUnbiased;
 
-    immutable sumSign = larger.sign;
-    auto sumExponent = largerExponent;
+    immutable smallerSign = (larger2.sign ? -1 : 1) * (smaller2.sign ? -1 : 1);
+    immutable sumMantissa = larger2.mantissa + smallerSign * smaller2.mantissa;
+    assert(cast(int) sumMantissa >= 0);
+    immutable sumSign = {
+        import std.math : FloatingPointControl;
 
-    return _rounder(sumSign, cast(ubyte) sumExponent, sumMantissa);
+        if (sumMantissa == 0)
+        {
+            if (FloatingPointControl.rounding == FloatingPointControl.roundDown)
+            {
+                return larger2.sign || smaller2.sign;
+            }
+            else
+            {
+                return larger2.sign && smaller2.sign;
+            }
+        }
+        else
+        {
+            return larger2.sign;
+        }
+    }();
+
+    return round(Fixed!Binary32(sumSign, sumExponent, sumMantissa));
 }
 
 package Binary32 mul(Binary32 lhs, Binary32 rhs) pure nothrow @nogc @safe

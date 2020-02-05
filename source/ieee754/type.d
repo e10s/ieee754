@@ -197,21 +197,6 @@ struct Binary32
             return rhs;
         }
 
-        if (isZero(lhs) && isZero(rhs))
-        {
-            return lhs.sign && rhs.sign ? -zero : zero;
-        }
-
-        if (isZero(lhs))
-        {
-            return rhs;
-        }
-
-        if (isZero(rhs))
-        {
-            return lhs;
-        }
-
         return add(lhs, rhs);
     }
 
@@ -241,6 +226,20 @@ struct Binary32
 
         assert(Binary32(float.min_normal / 2) + Binary32(
                 float.min_normal / 8) == Binary32(float.min_normal / 2 + float.min_normal / 8));
+    }
+
+    ///
+    @safe nothrow @nogc unittest
+    {
+        import ieee754.math : isIdentical;
+        import std.math : FloatingPointControl;
+
+        pragma(inline, false);
+        FloatingPointControl fpctrl;
+        fpctrl.rounding = FloatingPointControl.roundDown;
+        assert(isIdentical(Binary32(-1.0) + Binary32(1.0), -Binary32.zero));
+        assert(isIdentical(Binary32.zero - Binary32.zero, -Binary32.zero));
+        assert(isIdentical(-Binary32.zero + Binary32.zero, -Binary32.zero));
     }
 
     ///
