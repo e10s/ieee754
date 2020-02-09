@@ -266,7 +266,7 @@ package Float round(Float)(Fixed!Float r) pure nothrow @nogc @safe @property
         return r.sign ? -Float.infinity : Float.infinity;
     }
 
-    r.mantissa = roundImpl(r.sign, r.mantissa, Float.fractionBits);
+    r.mantissa = roundImpl!Float(r.sign, r.mantissa, Float.fractionBits);
 
     r.normalize();
     r.subnormalize();
@@ -282,26 +282,27 @@ package Float round(Float)(Fixed!Float r) pure nothrow @nogc @safe @property
     return Float(r.sign, r.underflow ? 0 : cast(ExpType) r.exponentBiased, r.fractionPart >>> 3);
 }
 
-package uint roundImpl(bool sign, uint q26, uint resultFractionBits) pure nothrow @nogc @safe
+package uint roundImpl(Float)(bool sign, Float.FractionType qFractionBitsWithGRS,
+        uint resultFractionBits) pure nothrow @nogc @safe
 in
 {
-    assert(resultFractionBits <= Binary32.fractionBits);
+    assert(resultFractionBits <= Float.fractionBits);
 }
 out (r)
 {
-    immutable extraBits = Binary32.fractionBits - resultFractionBits + 3;
+    immutable extraBits = Float.fractionBits - resultFractionBits + 3;
     assert((r >>> extraBits) << extraBits == r);
 }
 do
 {
     import std.math : FloatingPointControl;
 
-    immutable extraBits = Binary32.fractionBits - resultFractionBits + 3;
-    immutable hasExtra = q26 != (q26 >>> extraBits) << extraBits;
+    immutable extraBits = Float.fractionBits - resultFractionBits + 3;
+    immutable hasExtra = qFractionBitsWithGRS != (qFractionBitsWithGRS >>> extraBits) << extraBits;
 
     if (!hasExtra)
     {
-        return q26;
+        return qFractionBitsWithGRS;
     }
 
     bool roundToInf;
@@ -309,10 +310,10 @@ do
     switch (FloatingPointControl.rounding)
     {
     case FloatingPointControl.roundToNearest:
-        immutable shift = Binary32.fractionBits - resultFractionBits;
+        immutable shift = Float.fractionBits - resultFractionBits;
 
-        immutable ulp_r_s = q26 & ((0b1011 << shift) | ((1U << shift) - 1));
-        immutable g = q26 & (0b100 << shift);
+        immutable ulp_r_s = qFractionBitsWithGRS & ((0b1011 << shift) | ((1U << shift) - 1));
+        immutable g = qFractionBitsWithGRS & (0b100 << shift);
         roundToInf = g && ulp_r_s; // something magic
         break;
     case FloatingPointControl.roundDown:
@@ -327,7 +328,7 @@ do
         assert(0);
     }
 
-    return ((q26 >>> extraBits) + roundToInf) << extraBits;
+    return ((qFractionBitsWithGRS >>> extraBits) + roundToInf) << extraBits;
 }
 
 nothrow @nogc @safe unittest
@@ -340,64 +341,64 @@ nothrow @nogc @safe unittest
     {
         fpctrl.rounding = FloatingPointControl.roundToNearest;
 
-        assert(roundImpl(0, 0b10_000, Binary32.fractionBits) == 0b10_000);
-        assert(roundImpl(0, 0b10_0100, Binary32.fractionBits - 1) == 0b10_0000);
-        assert(roundImpl(0, 0b10_10100, Binary32.fractionBits - 2) == 0b11_00000);
-        assert(roundImpl(0, 0b10_100000, Binary32.fractionBits - 3) == 0b10_000000);
-        assert(roundImpl(0, 0b11_100, Binary32.fractionBits) == 0b100_000);
+        assert(roundImpl!Binary32(0, 0b10_000, Binary32.fractionBits) == 0b10_000);
+        assert(roundImpl!Binary32(0, 0b10_0100, Binary32.fractionBits - 1) == 0b10_0000);
+        assert(roundImpl!Binary32(0, 0b10_10100, Binary32.fractionBits - 2) == 0b11_00000);
+        assert(roundImpl!Binary32(0, 0b10_100000, Binary32.fractionBits - 3) == 0b10_000000);
+        assert(roundImpl!Binary32(0, 0b11_100, Binary32.fractionBits) == 0b100_000);
 
-        assert(roundImpl(1, 0b10_000, Binary32.fractionBits) == 0b10_000);
-        assert(roundImpl(1, 0b10_0100, Binary32.fractionBits - 1) == 0b10_0000);
-        assert(roundImpl(1, 0b10_10100, Binary32.fractionBits - 2) == 0b11_00000);
-        assert(roundImpl(1, 0b10_100000, Binary32.fractionBits - 3) == 0b10_000000);
-        assert(roundImpl(1, 0b11_100, Binary32.fractionBits) == 0b100_000);
+        assert(roundImpl!Binary32(1, 0b10_000, Binary32.fractionBits) == 0b10_000);
+        assert(roundImpl!Binary32(1, 0b10_0100, Binary32.fractionBits - 1) == 0b10_0000);
+        assert(roundImpl!Binary32(1, 0b10_10100, Binary32.fractionBits - 2) == 0b11_00000);
+        assert(roundImpl!Binary32(1, 0b10_100000, Binary32.fractionBits - 3) == 0b10_000000);
+        assert(roundImpl!Binary32(1, 0b11_100, Binary32.fractionBits) == 0b100_000);
     }
 
     {
         fpctrl.rounding = FloatingPointControl.roundDown;
 
-        assert(roundImpl(0, 0b10_000, Binary32.fractionBits) == 0b10_000);
-        assert(roundImpl(0, 0b10_0100, Binary32.fractionBits - 1) == 0b10_0000);
-        assert(roundImpl(0, 0b10_10100, Binary32.fractionBits - 2) == 0b10_00000);
-        assert(roundImpl(0, 0b10_100000, Binary32.fractionBits - 3) == 0b10_000000);
-        assert(roundImpl(0, 0b11_100, Binary32.fractionBits) == 0b11_000);
+        assert(roundImpl!Binary32(0, 0b10_000, Binary32.fractionBits) == 0b10_000);
+        assert(roundImpl!Binary32(0, 0b10_0100, Binary32.fractionBits - 1) == 0b10_0000);
+        assert(roundImpl!Binary32(0, 0b10_10100, Binary32.fractionBits - 2) == 0b10_00000);
+        assert(roundImpl!Binary32(0, 0b10_100000, Binary32.fractionBits - 3) == 0b10_000000);
+        assert(roundImpl!Binary32(0, 0b11_100, Binary32.fractionBits) == 0b11_000);
 
-        assert(roundImpl(1, 0b10_000, Binary32.fractionBits) == 0b10_000);
-        assert(roundImpl(1, 0b10_0100, Binary32.fractionBits - 1) == 0b11_0000);
-        assert(roundImpl(1, 0b10_10100, Binary32.fractionBits - 2) == 0b11_00000);
-        assert(roundImpl(1, 0b10_100000, Binary32.fractionBits - 3) == 0b11_000000);
-        assert(roundImpl(1, 0b11_100, Binary32.fractionBits) == 0b100_000);
+        assert(roundImpl!Binary32(1, 0b10_000, Binary32.fractionBits) == 0b10_000);
+        assert(roundImpl!Binary32(1, 0b10_0100, Binary32.fractionBits - 1) == 0b11_0000);
+        assert(roundImpl!Binary32(1, 0b10_10100, Binary32.fractionBits - 2) == 0b11_00000);
+        assert(roundImpl!Binary32(1, 0b10_100000, Binary32.fractionBits - 3) == 0b11_000000);
+        assert(roundImpl!Binary32(1, 0b11_100, Binary32.fractionBits) == 0b100_000);
     }
 
     {
         fpctrl.rounding = FloatingPointControl.roundUp;
 
-        assert(roundImpl(0, 0b10_000, Binary32.fractionBits) == 0b10_000);
-        assert(roundImpl(0, 0b10_0100, Binary32.fractionBits - 1) == 0b11_0000);
-        assert(roundImpl(0, 0b10_10100, Binary32.fractionBits - 2) == 0b11_00000);
-        assert(roundImpl(0, 0b10_100000, Binary32.fractionBits - 3) == 0b11_000000);
-        assert(roundImpl(0, 0b11_100, Binary32.fractionBits) == 0b100_000);
+        assert(roundImpl!Binary32(0, 0b10_000, Binary32.fractionBits) == 0b10_000);
+        assert(roundImpl!Binary32(0, 0b10_0100, Binary32.fractionBits - 1) == 0b11_0000);
+        assert(roundImpl!Binary32(0, 0b10_10100, Binary32.fractionBits - 2) == 0b11_00000);
+        assert(roundImpl!Binary32(0, 0b10_100000, Binary32.fractionBits - 3) == 0b11_000000);
+        assert(roundImpl!Binary32(0, 0b11_100, Binary32.fractionBits) == 0b100_000);
 
-        assert(roundImpl(1, 0b10_000, Binary32.fractionBits) == 0b10_000);
-        assert(roundImpl(1, 0b10_0100, Binary32.fractionBits - 1) == 0b10_0000);
-        assert(roundImpl(1, 0b10_10100, Binary32.fractionBits - 2) == 0b10_00000);
-        assert(roundImpl(1, 0b10_100000, Binary32.fractionBits - 3) == 0b10_000000);
-        assert(roundImpl(1, 0b11_100, Binary32.fractionBits) == 0b11_000);
+        assert(roundImpl!Binary32(1, 0b10_000, Binary32.fractionBits) == 0b10_000);
+        assert(roundImpl!Binary32(1, 0b10_0100, Binary32.fractionBits - 1) == 0b10_0000);
+        assert(roundImpl!Binary32(1, 0b10_10100, Binary32.fractionBits - 2) == 0b10_00000);
+        assert(roundImpl!Binary32(1, 0b10_100000, Binary32.fractionBits - 3) == 0b10_000000);
+        assert(roundImpl!Binary32(1, 0b11_100, Binary32.fractionBits) == 0b11_000);
     }
 
     {
         fpctrl.rounding = FloatingPointControl.roundToZero;
 
-        assert(roundImpl(0, 0b10_000, Binary32.fractionBits) == 0b10_000);
-        assert(roundImpl(0, 0b10_0100, Binary32.fractionBits - 1) == 0b10_0000);
-        assert(roundImpl(0, 0b10_10100, Binary32.fractionBits - 2) == 0b10_00000);
-        assert(roundImpl(0, 0b10_100000, Binary32.fractionBits - 3) == 0b10_000000);
-        assert(roundImpl(0, 0b11_100, Binary32.fractionBits) == 0b11_000);
+        assert(roundImpl!Binary32(0, 0b10_000, Binary32.fractionBits) == 0b10_000);
+        assert(roundImpl!Binary32(0, 0b10_0100, Binary32.fractionBits - 1) == 0b10_0000);
+        assert(roundImpl!Binary32(0, 0b10_10100, Binary32.fractionBits - 2) == 0b10_00000);
+        assert(roundImpl!Binary32(0, 0b10_100000, Binary32.fractionBits - 3) == 0b10_000000);
+        assert(roundImpl!Binary32(0, 0b11_100, Binary32.fractionBits) == 0b11_000);
 
-        assert(roundImpl(1, 0b10_000, Binary32.fractionBits) == 0b10_000);
-        assert(roundImpl(1, 0b10_0100, Binary32.fractionBits - 1) == 0b10_0000);
-        assert(roundImpl(1, 0b10_10100, Binary32.fractionBits - 2) == 0b10_00000);
-        assert(roundImpl(1, 0b10_100000, Binary32.fractionBits - 3) == 0b10_000000);
-        assert(roundImpl(1, 0b11_100, Binary32.fractionBits) == 0b11_000);
+        assert(roundImpl!Binary32(1, 0b10_000, Binary32.fractionBits) == 0b10_000);
+        assert(roundImpl!Binary32(1, 0b10_0100, Binary32.fractionBits - 1) == 0b10_0000);
+        assert(roundImpl!Binary32(1, 0b10_10100, Binary32.fractionBits - 2) == 0b10_00000);
+        assert(roundImpl!Binary32(1, 0b10_100000, Binary32.fractionBits - 3) == 0b10_000000);
+        assert(roundImpl!Binary32(1, 0b11_100, Binary32.fractionBits) == 0b11_000);
     }
 }

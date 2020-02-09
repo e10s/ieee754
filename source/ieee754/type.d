@@ -3,27 +3,48 @@ module ieee754.type;
 import ieee754.core;
 
 /// Single precision FP
-struct Binary32
+alias Binary32 = IEEE754Binary!32;
+///
+enum bool isIEEE754Binary(T) = is(T == IEEE754Binary!n, alias n);
+static assert(isIEEE754Binary!Binary32);
+
+///
+mixin template IEEE754Binary32Properties()
 {
-    import std.bitmanip : bitfields;
-
-    mixin(bitfields!(uint, "fraction", fractionBits, ubyte, "exponent",
-            exponentBits, bool, "sign", signBits));
-
     ///
-    enum uint bias = 127, fractionBits = 23, exponentBits = 8, signBits = 1;
-
+    alias SignType = bool;
+    ///
+    alias ExponentType = ubyte;
+    ///
+    alias FractionType = uint;
     ///
     alias PrimitiveType = float;
 
     ///
+    enum uint bias = 127, fractionBits = 23, exponentBits = 8, signBits = 1;
+
+    /// Number of decimal digits of precision
+    enum int dig = 6; // floor(fractionBits * log_10(2))
+}
+
+///
+struct IEEE754Binary(uint floatBits) if (floatBits == 32)
+{
+    mixin IEEE754Binary32Properties;
+
+    import std.bitmanip : bitfields;
+
+    mixin(bitfields!(FractionType, "fraction", fractionBits, ExponentType,
+            "exponent", exponentBits, SignType, "sign", signBits));
+
+    ///
     this(PrimitiveType value) pure nothrow @nogc @trusted
     {
-        this = *cast(Binary32*)&value;
+        this = *cast(IEEE754Binary*)&value;
     }
 
     ///
-    this(bool sign, ubyte exponent, uint fraction) pure nothrow @nogc @safe
+    this(SignType sign, ExponentType exponent, FractionType fraction) pure nothrow @nogc @safe
     {
         this.sign = sign;
         this.exponent = exponent;
@@ -42,40 +63,13 @@ struct Binary32
     //-----------------
 
     /// Positive infinity value
-    static Binary32 infinity() pure nothrow @nogc @safe @property
-    out (r)
-    {
-        import ieee754.math : isInfinity;
-
-        assert(isInfinity(r));
-    }
-    do
-    {
-        return Binary32(0, 0xFF, 0);
-    }
+    enum IEEE754Binary infinity = IEEE754Binary(0, max_exp + bias, 0);
 
     /// NaN value
-    static Binary32 nan() pure nothrow @nogc @safe @property
-    out (r)
-    {
-        import ieee754.math : isNaN;
-
-        assert(isNaN(r));
-    }
-    do
-    {
-        return Binary32(0, 0xFF, (1U << fractionBits) - 1);
-    }
-
-    /// Number of decimal digits of precision
-    enum int dig = 6; // floor(fractionBits * log_10(2))
+    enum IEEE754Binary nan = IEEE754Binary(0, max_exp + bias, (FractionType(1) << fractionBits) - 1);
 
     /// Smallest increment to the value 1
-    static Binary32 epsilon() pure nothrow @nogc @safe @property
-    {
-        // 2^-fractionBits
-        return Binary32(0, bias - fractionBits, 0);
-    }
+    enum IEEE754Binary epsilon = IEEE754Binary(0, bias - fractionBits, 0); // 2^-fractionBits
 
     /// Number of bits in mantissa
     enum int mant_dig = fractionBits + 1;
@@ -87,50 +81,19 @@ struct Binary32
     enum int min_exp = 2 - bias;
 
     /// Largest representable value that's not infinity
-    static Binary32 max() pure nothrow @nogc @safe @property
-    out (r)
-    {
-        import ieee754.math : isFinite;
-
-        assert(isFinite(r));
-    }
-    do
-    {
-        // (1-2^-mant_dig) * 2^max_exp
-        return Binary32(0, 0xFE, (1U << fractionBits) - 1);
-    }
+    enum IEEE754Binary max = IEEE754Binary(0, max_exp - 1 + bias,
+                (FractionType(1) << fractionBits) - 1); // (1-2^-mant_dig) * 2^max_exp
 
     /// Smallest representable normalized value that's not 0
-    static Binary32 min_normal() pure nothrow @nogc @safe @property
-    out (r)
-    {
-        import ieee754.math : isNormal;
-
-        assert(isNormal(r));
-    }
-    do
-    {
-        // 2^(min_exp-1)
-        return Binary32(0, 1, 0);
-    }
+    enum IEEE754Binary min_normal = IEEE754Binary(0, 1, 0); // 2^(min_exp-1)
 
     /// Positive 0 value
-    static Binary32 zero() pure nothrow @nogc @safe @property
-    out (r)
-    {
-        import ieee754.math : isZero;
-
-        assert(isZero(r));
-    }
-    do
-    {
-        return Binary32(0, 0, 0);
-    }
+    enum IEEE754Binary zero = IEEE754Binary(0, 0, 0);
 
     //-----------------
 
     ///
-    Binary32 opUnary(string op)() const if (op == "+" || op == "-")
+    IEEE754Binary opUnary(string op)() const if (op == "+" || op == "-")
     {
         static if (op == "+")
         {
@@ -138,7 +101,7 @@ struct Binary32
         }
         else
         {
-            Binary32 r = this;
+            IEEE754Binary r = this;
             r.sign = !r.sign;
             return r;
         }
@@ -157,7 +120,8 @@ struct Binary32
     }
 
     ///
-    Binary32 opBinary(string op)(Binary32 rhs) const pure if (op == "+" || op == "-")
+    IEEE754Binary opBinary(string op)(IEEE754Binary rhs) const pure
+            if (op == "+" || op == "-")
     {
         immutable lhs = this;
 
@@ -243,7 +207,7 @@ struct Binary32
     }
 
     ///
-    Binary32 opBinary(string op)(Binary32 rhs) const if (op == "*")
+    IEEE754Binary opBinary(string op)(IEEE754Binary rhs) const if (op == "*")
     {
         immutable lhs = this;
 
@@ -266,7 +230,7 @@ struct Binary32
 
         if (lhs.isInfinity || rhs.isInfinity)
         {
-            auto inf = Binary32.infinity;
+            auto inf = infinity;
             inf.sign = lhs.sign ^ rhs.sign;
             return inf;
         }
@@ -304,7 +268,7 @@ struct Binary32
     }
 
     ///
-    Binary32 opBinary(string op)(Binary32 rhs) const pure nothrow @nogc @safe
+    IEEE754Binary opBinary(string op)(IEEE754Binary rhs) const pure nothrow @nogc @safe
             if (op == "/")
     {
         immutable lhs = this;
@@ -328,14 +292,14 @@ struct Binary32
 
         if (isZero(lhs) || isInfinity(rhs))
         {
-            auto z = Binary32.zero;
+            auto z = zero;
             z.sign = lhs.sign ^ rhs.sign;
             return z;
         }
 
         if (isInfinity(lhs) || isZero(rhs))
         {
-            auto inf = Binary32.infinity;
+            auto inf = infinity;
             inf.sign = lhs.sign ^ rhs.sign;
             return inf;
         }
@@ -367,7 +331,7 @@ struct Binary32
     }
 
     ///
-    Binary32 opOpAssign(string op)(Binary32 rhs)
+    IEEE754Binary opOpAssign(string op)(IEEE754Binary rhs)
             if (op == "+" || op == "-" || op == "*" || op == "/")
     {
         this = opBinary!op(rhs);
@@ -391,7 +355,7 @@ struct Binary32
     }
 
     ///
-    bool opEquals()(auto ref const Binary32 x) const pure nothrow @nogc @safe
+    bool opEquals()(auto ref const IEEE754Binary x) const pure nothrow @nogc @safe
     {
         import ieee754.math : isNaN, isZero;
 
@@ -479,18 +443,18 @@ struct Binary32
             {
                 import ieee754.math : isNormal, isSubnormal;
 
-                immutable integerPart = isNormal(this) ? 1U << fractionBits : 0;
+                immutable integerPart = isNormal(this) ? FractionType(1) << fractionBits : 0;
                 auto mantissa = (integerPart | fraction) << 3;
 
                 immutable resultFractionBits = fmt.precision < 6 ? fmt.precision * 4 : fractionBits;
 
                 import ieee754.core : roundImpl;
 
-                mantissa = roundImpl(sign, mantissa, resultFractionBits);
+                mantissa = roundImpl!IEEE754Binary(sign, mantissa, resultFractionBits);
 
                 immutable roundedInt = mantissa >>> fractionBits + 3;
-                enum fractionMask = (1U << fractionBits + 3) - 1;
-                immutable roundedFrac24 = (mantissa & fractionMask) >> 2;
+                enum fractionMask = (FractionType(1) << fractionBits + 3) - 1;
+                immutable roundedFracWithOneMoreBit = (mantissa & fractionMask) >> 2;
 
                 immutable hexPrefix = "0x";
                 immutable point = ".";
@@ -501,7 +465,7 @@ struct Binary32
                 import std.range : chain, repeat, takeExactly;
 
                 auto hexInt = toChars!16(roundedInt);
-                auto hexFracShortest = format!"%06x"(roundedFrac24).stripRight('0');
+                auto hexFracShortest = format!"%06x"(roundedFracWithOneMoreBit).stripRight('0');
 
                 immutable hexFracDesiredLength = fmt.precision == fmt.UNSPECIFIED
                     ? hexFracShortest.length : fmt.precision;

@@ -1,9 +1,9 @@
 module ieee754.math;
 
-import ieee754.type : Binary32;
+import ieee754.type : Binary32, isIEEE754Binary;
 
 ///
-Binary32 fabs(Binary32 x) pure nothrow @nogc @safe
+T fabs(T)(const(T) x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 {
     return x.sign ? -x : x;
 }
@@ -17,7 +17,7 @@ Binary32 fabs(Binary32 x) pure nothrow @nogc @safe
 }
 
 ///
-Binary32 sqrt(Binary32 x) pure nothrow @nogc @safe
+T sqrt(T)(const(T) x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 {
     if (x.isNaN || x.isInfinity || x.isZero)
     {
@@ -26,12 +26,12 @@ Binary32 sqrt(Binary32 x) pure nothrow @nogc @safe
 
     if (x.sign)
     {
-        return -Binary32.nan; // Why -???
+        return -T.nan; // Why -???
     }
 
     import ieee754.core : Fixed;
 
-    auto x2 = Fixed!Binary32(x);
+    auto x2 = Fixed!T(x);
 
     if (x2.exponentUnbiased % 2)
     {
@@ -45,14 +45,14 @@ Binary32 sqrt(Binary32 x) pure nothrow @nogc @safe
     immutable sqrtExponent = x2.exponentUnbiased / 2;
 
     // [padding][integer: 2].[fraction: fractionBits][margin: fractionBits]
-    immutable operandMantissa = cast(ulong) x2.mantissa << Fixed!Binary32.fractionBits;
+    immutable operandMantissa = cast(ulong) x2.mantissa << Fixed!T.fractionBits;
 
     // [padding][integer: 1].[fraction: fractionBits]
     uint sqrtMantissa;
 
     uint tempAdd, tempMulSub;
 
-    foreach_reverse (i; 1 .. Fixed!Binary32.fractionBits + 1)
+    foreach_reverse (i; 1 .. Fixed!T.fractionBits + 1)
     {
         immutable twoBits = (operandMantissa >>> (i * 2)) & 0b11;
         tempMulSub <<= 2;
@@ -72,11 +72,11 @@ Binary32 sqrt(Binary32 x) pure nothrow @nogc @safe
     sqrtMantissa |= cast(bool) tempMulSub;
 
     // [padding][integer: 1].[fraction: fractionBits]
-    assert(sqrtMantissa >>> Fixed!Binary32.fractionBits == 1);
+    assert(sqrtMantissa >>> Fixed!T.fractionBits == 1);
 
     import ieee754.core : round;
 
-    return round(Fixed!Binary32(0, sqrtExponent, sqrtMantissa));
+    return round(Fixed!T(0, sqrtExponent, sqrtMantissa));
 }
 
 ///
@@ -98,7 +98,7 @@ Binary32 sqrt(Binary32 x) pure nothrow @nogc @safe
 //---------------------------
 
 ///
-int cmp(Binary32 x, Binary32 y) pure nothrow @nogc @safe
+int cmp(T)(T x, T y) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 {
     if (x.sign != y.sign)
     {
@@ -134,14 +134,14 @@ pure nothrow @nogc @safe unittest
     assert(cmp(Binary32.infinity, Binary32.nan) < 0);
     assert(cmp(-Binary32.nan, Binary32.nan) < 0);
 
-    assert(cmp(NaN(10), NaN(20)) < 0);
-    assert(cmp(-NaN(20), -NaN(10)) < 0);
+    assert(cmp(NaN!Binary32(10), NaN!Binary32(20)) < 0);
+    assert(cmp(-NaN!Binary32(20), -NaN!Binary32(10)) < 0);
 }
 
 ///
-ulong getNaNPayload(Binary32 x) pure nothrow @nogc @safe
+ulong getNaNPayload(T)(T x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 {
-    enum qNaNBit = 1U << (Binary32.fractionBits - 1);
+    enum qNaNBit = T.FractionType(1) << (T.fractionBits - 1);
     enum payloadMask = qNaNBit - 1;
 
     return x.fraction & payloadMask;
@@ -150,34 +150,34 @@ ulong getNaNPayload(Binary32 x) pure nothrow @nogc @safe
 ///
 pure nothrow @nogc @safe unittest
 {
-    auto a = NaN(1_000_000);
+    auto a = NaN!Binary32(1_000_000);
     assert(isNaN(a));
     assert(getNaNPayload(a) == 1_000_000);
 }
 
 ///
-Binary32 NaN(ulong payload) pure nothrow @nogc @safe
+T NaN(T)(ulong payload) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 {
-    enum qNaNBit = 1U << (Binary32.fractionBits - 1);
+    enum qNaNBit = T.FractionType(1) << (T.fractionBits - 1);
     enum payloadMask = qNaNBit - 1;
 
-    return Binary32(0, 0xFF, qNaNBit | (payload & payloadMask));
+    return T(0, T.max_exp + T.bias, qNaNBit | (payload & payloadMask));
 }
 
 ///
 pure nothrow @nogc @safe unittest
 {
-    auto a = NaN(1_000_000);
+    auto a = NaN!Binary32(1_000_000);
     assert(isNaN(a));
     assert(getNaNPayload(a) == 1_000_000);
 }
 
 ///
-Binary32 nextDown(Binary32 x) pure nothrow @nogc @safe
+T nextDown(T)(const(T) x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 {
-    if (x == Binary32.infinity)
+    if (x == T.infinity)
     {
-        return Binary32.max;
+        return T.max;
     }
 
     return x - ulp(x);
@@ -197,11 +197,11 @@ pure nothrow @nogc @safe unittest
 }
 
 ///
-Binary32 nextUp(Binary32 x) pure nothrow @nogc @safe
+T nextUp(T)(const(T) x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 {
-    if (x == -Binary32.infinity)
+    if (x == -T.infinity)
     {
-        return -Binary32.max;
+        return -T.max;
     }
 
     return x + ulp(x);
@@ -221,7 +221,7 @@ pure nothrow @nogc @safe unittest
 }
 
 ///
-Binary32 ulp(Binary32 x) pure nothrow @nogc @safe
+T ulp(T)(T x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 {
     if (isNaN(x))
     {
@@ -230,15 +230,15 @@ Binary32 ulp(Binary32 x) pure nothrow @nogc @safe
 
     if (isInfinity(x))
     {
-        return Binary32.infinity;
+        return T.infinity;
     }
 
     if (isZero(x) || isSubnormal(x))
     {
-        return Binary32(0, 0, 1);
+        return T(0, 0, 1);
     }
 
-    return Binary32(0, x.exponent, 0) * Binary32.epsilon;
+    return T(0, x.exponent, 0) * T.epsilon;
 }
 
 ///
@@ -253,9 +253,9 @@ pure nothrow @nogc @safe unittest
 //---------------------------
 
 ///
-bool isFinite(Binary32 x) pure nothrow @nogc @safe
+bool isFinite(T)(T x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 {
-    return x.exponent != 0xFF;
+    return x.exponent != T.max_exp + T.bias;
 }
 
 ///
@@ -269,7 +269,7 @@ bool isFinite(Binary32 x) pure nothrow @nogc @safe
 }
 
 ///
-bool isIdentical(Binary32 x, Binary32 y) pure nothrow @nogc @safe
+bool isIdentical(T)(T x, T y) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 {
     return x.sign == y.sign && x.exponent == y.exponent && x.exponent == y.exponent;
 }
@@ -287,9 +287,9 @@ bool isIdentical(Binary32 x, Binary32 y) pure nothrow @nogc @safe
 }
 
 ///
-bool isInfinity(Binary32 x) pure nothrow @nogc @safe
+bool isInfinity(T)(T x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 {
-    return x.exponent == 0xFF && !x.fraction;
+    return x.exponent == T.max_exp + T.bias && !x.fraction;
 }
 
 ///
@@ -305,9 +305,9 @@ bool isInfinity(Binary32 x) pure nothrow @nogc @safe
 }
 
 ///
-bool isNaN(Binary32 x) pure nothrow @nogc @safe
+bool isNaN(T)(T x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 {
-    return x.exponent == 0xFF && x.fraction;
+    return x.exponent == T.max_exp + T.bias && x.fraction;
 }
 
 ///
@@ -322,9 +322,9 @@ bool isNaN(Binary32 x) pure nothrow @nogc @safe
 }
 
 ///
-bool isNormal(Binary32 x) pure nothrow @nogc @safe
+bool isNormal(T)(T x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 {
-    return x.exponent && x.exponent != 0xFF;
+    return x.exponent && x.exponent != T.max_exp + T.bias;
 }
 
 ///
@@ -344,7 +344,7 @@ bool isNormal(Binary32 x) pure nothrow @nogc @safe
 }
 
 ///
-bool isPowerOf2(Binary32 x) pure nothrow @nogc @safe
+bool isPowerOf2(T)(T x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 {
     if (x.sign)
     {
@@ -389,7 +389,7 @@ bool isPowerOf2(Binary32 x) pure nothrow @nogc @safe
 }
 
 ///
-bool isSubnormal(Binary32 x) pure nothrow @nogc @safe
+bool isSubnormal(T)(T x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 {
     return !x.exponent && x.fraction;
 }
@@ -404,7 +404,7 @@ bool isSubnormal(Binary32 x) pure nothrow @nogc @safe
 }
 
 ///
-bool isZero(Binary32 x) pure nothrow @nogc @safe
+bool isZero(T)(T x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 {
     return !x.exponent && !x.fraction;
 }
@@ -422,12 +422,12 @@ bool isZero(Binary32 x) pure nothrow @nogc @safe
 import std.traits : isIntegral;
 
 ///
-Binary32 copysign(T)(T to, Binary32 from) pure nothrow @nogc @safe
-        if (is(T : Binary32) || isIntegral!T)
+U copysign(T, U)(T to, const(U) from) pure nothrow @nogc @safe
+        if ((isIEEE754Binary!T || isIntegral!T) && isIEEE754Binary!U)
 {
     static if (isIntegral!T)
     {
-        immutable to_ = Binary32(to);
+        immutable to_ = U(to);
     }
     else
     {
@@ -453,9 +453,9 @@ Binary32 copysign(T)(T to, Binary32 from) pure nothrow @nogc @safe
 }
 
 ///
-Binary32 sgn(Binary32 x) pure nothrow @nogc @safe
+T sgn(T)(const(T) x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 {
-    immutable one = Binary32(1.0);
+    immutable one = T(1.0);
     return (x.isNaN || x.isZero) ? x : x.sign ? -one : one;
 }
 
@@ -469,7 +469,7 @@ Binary32 sgn(Binary32 x) pure nothrow @nogc @safe
 }
 
 ///
-int signbit(Binary32 x) pure nothrow @nogc @safe
+int signbit(T)(T x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 {
     return x.sign;
 }
