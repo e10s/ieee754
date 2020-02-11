@@ -282,8 +282,8 @@ package Float round(Float)(Fixed!Float r) pure nothrow @nogc @safe @property
     return Float(r.sign, r.underflow ? 0 : cast(ExpType) r.exponentBiased, r.fractionPart >>> 3);
 }
 
-package uint roundImpl(Float)(bool sign, Float.FractionType qFractionBitsWithGRS,
-        uint resultFractionBits) pure nothrow @nogc @safe
+package Float.FractionType roundImpl(Float)(bool sign,
+        Float.FractionType qFractionBitsWithGRS, uint resultFractionBits) pure nothrow @nogc @safe
 in
 {
     assert(resultFractionBits <= Float.fractionBits);
@@ -312,8 +312,9 @@ do
     case FloatingPointControl.roundToNearest:
         immutable shift = Float.fractionBits - resultFractionBits;
 
-        immutable ulp_r_s = qFractionBitsWithGRS & ((0b1011 << shift) | ((1U << shift) - 1));
-        immutable g = qFractionBitsWithGRS & (0b100 << shift);
+        immutable ulp_r_s = qFractionBitsWithGRS & (
+                (Float.FractionType(0b1011) << shift) | ((Float.FractionType(1) << shift) - 1));
+        immutable g = qFractionBitsWithGRS & (Float.FractionType(0b100) << shift);
         roundToInf = g && ulp_r_s; // something magic
         break;
     case FloatingPointControl.roundDown:

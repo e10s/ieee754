@@ -4,9 +4,12 @@ import ieee754.core;
 
 /// Single precision FP
 alias Binary32 = IEEE754Binary!32;
+/// Double precision FP
+alias Binary64 = IEEE754Binary!64;
 ///
 enum bool isIEEE754Binary(T) = is(T == IEEE754Binary!n, alias n);
 static assert(isIEEE754Binary!Binary32);
+static assert(isIEEE754Binary!Binary64);
 
 ///
 mixin template IEEE754Binary32Properties()
@@ -28,9 +31,39 @@ mixin template IEEE754Binary32Properties()
 }
 
 ///
-struct IEEE754Binary(uint floatBits) if (floatBits == 32)
+mixin template IEEE754Binary64Properties()
 {
-    mixin IEEE754Binary32Properties;
+    ///
+    alias SignType = bool;
+    ///
+    alias ExponentType = ushort;
+    ///
+    alias FractionType = ulong;
+    ///
+    alias PrimitiveType = double;
+
+    ///
+    enum uint bias = 1023, fractionBits = 52, exponentBits = 11, signBits = 1;
+
+    /// Number of decimal digits of precision
+    enum int dig = 15; // floor(fractionBits * log_10(2))
+}
+
+///
+struct IEEE754Binary(uint floatBits) if (floatBits == 32 || floatBits == 64)
+{
+    static if (floatBits == 32)
+    {
+        mixin IEEE754Binary32Properties;
+    }
+    else static if (floatBits == 64)
+    {
+        mixin IEEE754Binary64Properties;
+    }
+    else
+    {
+        static assert(0);
+    }
 
     import std.bitmanip : bitfields;
 
@@ -110,8 +143,20 @@ struct IEEE754Binary(uint floatBits) if (floatBits == 32)
     ///
     @safe pure nothrow @nogc unittest
     {
-        immutable a = Binary32(3.14);
-        immutable b = Binary32(-3.14);
+        immutable a = Binary32(3.14f);
+        immutable b = Binary32(-3.14f);
+
+        assert(+a == a);
+        assert(+b == b);
+        assert(-a == b);
+        assert(-b == a);
+    }
+
+    ///
+    @safe pure nothrow @nogc unittest
+    {
+        immutable a = Binary64(3.14);
+        immutable b = Binary64(-3.14);
 
         assert(+a == a);
         assert(+b == b);
@@ -375,13 +420,25 @@ struct IEEE754Binary(uint floatBits) if (floatBits == 32)
     ///
     pure nothrow @nogc @safe unittest
     {
-        immutable a = Binary32(3.14);
-        immutable b = Binary32(-3.14);
+        immutable a = Binary32(3.14f);
+        immutable b = Binary32(-3.14f);
 
         assert(a == a);
         assert(a != b);
         assert(Binary32.zero == -Binary32.zero);
         assert(Binary32.nan != Binary32.nan);
+    }
+
+    ///
+    pure nothrow @nogc @safe unittest
+    {
+        immutable a = Binary64(3.14);
+        immutable b = Binary64(-3.14);
+
+        assert(a == a);
+        assert(a != b);
+        assert(Binary64.zero == -Binary64.zero);
+        assert(Binary64.nan != Binary64.nan);
     }
 
     ///
@@ -441,20 +498,20 @@ struct IEEE754Binary(uint floatBits) if (floatBits == 32)
             }
             else
             {
-                import ieee754.math : isNormal, isSubnormal;
+                auto fixed = Fixed!IEEE754Binary(this);
+                fixed.subnormalize();
 
-                immutable integerPart = isNormal(this) ? FractionType(1) << fractionBits : 0;
-                auto mantissa = (integerPart | fraction) << 3;
-
-                immutable resultFractionBits = fmt.precision < 6 ? fmt.precision * 4 : fractionBits;
+                enum goodPrecision = fractionBits / 4 + cast(bool)(fractionBits % 4);
+                immutable resultFractionBits = fmt.precision < goodPrecision
+                    ? fmt.precision * 4 : fractionBits;
 
                 import ieee754.core : roundImpl;
 
-                mantissa = roundImpl!IEEE754Binary(sign, mantissa, resultFractionBits);
+                fixed.mantissa = roundImpl!IEEE754Binary(fixed.sign,
+                        fixed.mantissa, resultFractionBits);
 
-                immutable roundedInt = mantissa >>> fractionBits + 3;
-                enum fractionMask = (FractionType(1) << fractionBits + 3) - 1;
-                immutable roundedFracWithOneMoreBit = (mantissa & fractionMask) >> 2;
+                immutable roundedInt = fixed.integerPart;
+                immutable roundedFrac = fixed.fractionPart >> (fractionBits + 3 - goodPrecision * 4);
 
                 immutable hexPrefix = "0x";
                 immutable point = ".";
@@ -465,7 +522,8 @@ struct IEEE754Binary(uint floatBits) if (floatBits == 32)
                 import std.range : chain, repeat, takeExactly;
 
                 auto hexInt = toChars!16(roundedInt);
-                auto hexFracShortest = format!"%06x"(roundedFracWithOneMoreBit).stripRight('0');
+                immutable f = format!"%%0%dx"(goodPrecision);
+                auto hexFracShortest = format!f(roundedFrac).stripRight('0');
 
                 immutable hexFracDesiredLength = fmt.precision == fmt.UNSPECIFIED
                     ? hexFracShortest.length : fmt.precision;
@@ -484,6 +542,8 @@ struct IEEE754Binary(uint floatBits) if (floatBits == 32)
                 {
                     result2 ~= hexFracShortest.chain(repeat('0')).takeExactly(hexFracDesiredLength);
                 }
+
+                import ieee754.math : isNormal, isSubnormal;
 
                 immutable decExp = isNormal(this) ? cast(int) exponent - int(bias) : isSubnormal(this)
                     ? 1 - int(bias) : 0;
@@ -557,6 +617,37 @@ struct IEEE754Binary(uint floatBits) if (floatBits == 32)
             {
                 assert(format(fmt, a) == format(fmt, a.value),
                         fmt ~ "@@" ~ format(fmt, a) ~ "@@" ~ format(fmt, a.value));
+            }
+        }
+    }
+
+    unittest  // TODO: simplify
+    {
+        import std.random : Mt19937_64;
+        import std.algorithm : map;
+        import std.range : take;
+
+        union FloatContainer
+        {
+            ulong i;
+            double f;
+        }
+
+        auto testcases = Mt19937_64().map!(a => FloatContainer(a).f)
+            .map!(a => Binary64(a));
+
+        foreach (a; testcases.take(1000))
+        {
+            import std.format : format;
+
+            immutable fmts = [
+                "% 1a", "%a", "%+.5a", "%.4a", "% -.3a", "%+ .2a", "%.1a",
+                "%-#010.0a", "%#A", "%03.15a", "%-17.18a", "%-020a", "%030.a"
+            ];
+            foreach (fmt; fmts)
+            {
+                assert(format(fmt, a) == format(fmt, a.value),
+                        fmt ~ "@@" ~ format(fmt, a) ~ "@@" ~ format(fmt, a.value) ~ a.toString);
             }
         }
     }
