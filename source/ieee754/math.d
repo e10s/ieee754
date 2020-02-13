@@ -1,6 +1,6 @@
 module ieee754.math;
 
-import ieee754.type : Binary32, isIEEE754Binary;
+import ieee754.type : Binary32, Binary64, isIEEE754Binary;
 
 ///
 T fabs(T)(const(T) x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
@@ -14,6 +14,14 @@ T fabs(T)(const(T) x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
     assert(isIdentical(fabs(Binary32.zero), Binary32.zero));
     assert(isIdentical(fabs(-Binary32.zero), Binary32.zero));
     assert(fabs(Binary32(-10.0)) == Binary32(10.0));
+}
+
+///
+@safe pure nothrow @nogc unittest
+{
+    assert(isIdentical(fabs(Binary64.zero), Binary64.zero));
+    assert(isIdentical(fabs(-Binary64.zero), Binary64.zero));
+    assert(fabs(Binary64(-10.0)) == Binary64(10.0));
 }
 
 ///
@@ -95,6 +103,24 @@ T sqrt(T)(const(T) x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
     assert(sqrt(small) == Binary32(std.math.sqrt(small.value)));
 }
 
+///
+// FIXME:
+version(None)
+@safe pure nothrow @nogc unittest
+{
+    static import std.math;
+
+    assert(sqrt(Binary64(2.0)) == Binary64(std.math.sqrt(2.0f)));
+    assert(sqrt(Binary64(9.0)) == Binary64(std.math.sqrt(9.0f)));
+
+    assert(isNaN(sqrt(Binary64(-1.0f))));
+
+    assert(sqrt(-Binary64.zero) == -Binary64.zero);
+
+    immutable small = Binary64.min_normal / Binary64(7.0);
+    assert(sqrt(small) == Binary64(std.math.sqrt(small.value)));
+}
+
 //---------------------------
 
 ///
@@ -105,8 +131,8 @@ int cmp(T)(T x, T y) pure nothrow @nogc @safe if (isIEEE754Binary!T)
         return x.sign ? -1 : 1;
     }
 
-    immutable xMagnitude = (x.exponent << Binary32.fractionBits) | x.fraction;
-    immutable yMagnitude = (y.exponent << Binary32.fractionBits) | y.fraction;
+    immutable xMagnitude = (cast(T.FractionType) x.exponent << T.fractionBits) | x.fraction;
+    immutable yMagnitude = (cast(T.FractionType) y.exponent << T.fractionBits) | y.fraction;
 
     immutable diff = (xMagnitude > yMagnitude) - (xMagnitude < yMagnitude);
 
@@ -139,6 +165,31 @@ pure nothrow @nogc @safe unittest
 }
 
 ///
+pure nothrow @nogc @safe unittest
+{
+    assert(cmp(-Binary64.infinity, -Binary64.max) < 0);
+    assert(cmp(-Binary64.max, Binary64(-100.0)) < 0);
+    assert(cmp(Binary64(-100.0), Binary64(-0.5)) < 0);
+    assert(cmp(Binary64(-0.5), Binary64(0.0)) < 0);
+    assert(cmp(Binary64(0.0), Binary64(0.5)) < 0);
+    assert(cmp(Binary64(0.5), Binary64(100.0)) < 0);
+    assert(cmp(Binary64(100.0), Binary64.max) < 0);
+    assert(cmp(Binary64.max, Binary64.infinity) < 0);
+
+    assert(cmp(Binary64(1.0), Binary64(1.0)) == 0);
+
+    assert(cmp(Binary64(-0.0), Binary64(+0.0)) < 0);
+    assert(cmp(Binary64(+0.0), Binary64(-0.0)) > 0);
+
+    assert(cmp(-Binary64.nan, -Binary64.infinity) < 0);
+    assert(cmp(Binary64.infinity, Binary64.nan) < 0);
+    assert(cmp(-Binary64.nan, Binary64.nan) < 0);
+
+    assert(cmp(NaN!Binary64(10), NaN!Binary64(20)) < 0);
+    assert(cmp(-NaN!Binary64(20), -NaN!Binary64(10)) < 0);
+}
+
+///
 ulong getNaNPayload(T)(T x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 {
     enum qNaNBit = T.FractionType(1) << (T.fractionBits - 1);
@@ -156,6 +207,14 @@ pure nothrow @nogc @safe unittest
 }
 
 ///
+pure nothrow @nogc @safe unittest
+{
+    auto a = NaN!Binary64(1_000_000);
+    assert(isNaN(a));
+    assert(getNaNPayload(a) == 1_000_000);
+}
+
+///
 T NaN(T)(ulong payload) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 {
     enum qNaNBit = T.FractionType(1) << (T.fractionBits - 1);
@@ -168,6 +227,14 @@ T NaN(T)(ulong payload) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 pure nothrow @nogc @safe unittest
 {
     auto a = NaN!Binary32(1_000_000);
+    assert(isNaN(a));
+    assert(getNaNPayload(a) == 1_000_000);
+}
+
+///
+pure nothrow @nogc @safe unittest
+{
+    auto a = NaN!Binary64(1_000_000);
     assert(isNaN(a));
     assert(getNaNPayload(a) == 1_000_000);
 }
@@ -197,6 +264,21 @@ pure nothrow @nogc @safe unittest
 }
 
 ///
+// FIXME:
+version(None)
+pure nothrow @nogc @safe unittest
+{
+    assert(isNaN(nextDown(Binary64.init)));
+
+    assert(nextDown(Binary64.infinity) == Binary64.max);
+    assert(nextDown(Binary64.zero) == -Binary64.min_normal * Binary64.epsilon);
+    assert(nextDown(-Binary64.max) == -Binary64.infinity);
+    assert(nextDown(-Binary64.infinity) == -Binary64.infinity);
+
+    assert(nextDown(Binary64(1.0) + Binary64.epsilon) == Binary64(1.0));
+}
+
+///
 T nextUp(T)(const(T) x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 {
     if (x == -T.infinity)
@@ -218,6 +300,21 @@ pure nothrow @nogc @safe unittest
     assert(nextUp(Binary32.infinity) == Binary32.infinity);
 
     assert(nextUp(Binary32(1.0)) == Binary32(1.0) + Binary32.epsilon);
+}
+
+///
+// FIXME:
+version(None)
+pure nothrow @nogc @safe unittest
+{
+    assert(isNaN(nextUp(Binary64.init)));
+
+    assert(nextUp(-Binary64.infinity) == -Binary64.max);
+    assert(nextUp(-Binary64.zero) == Binary64.min_normal * Binary64.epsilon);
+    assert(nextUp(Binary64.max) == Binary64.infinity);
+    assert(nextUp(Binary64.infinity) == Binary64.infinity);
+
+    assert(nextUp(Binary64(1.0)) == Binary64(1.0) + Binary64.epsilon);
 }
 
 ///
@@ -250,6 +347,17 @@ pure nothrow @nogc @safe unittest
     assert(ulp(-Binary32(1.0)) == Binary32.epsilon);
 }
 
+///
+// FIXME:
+version(None)
+pure nothrow @nogc @safe unittest
+{
+    assert(isNaN(ulp(Binary32.nan)));
+    assert(ulp(-Binary32.infinity) == Binary32.infinity);
+    assert(ulp(Binary32.zero) == Binary32.min_normal * Binary32.epsilon);
+    assert(ulp(-Binary32(1.0)) == Binary32.epsilon);
+}
+
 //---------------------------
 
 ///
@@ -266,6 +374,16 @@ bool isFinite(T)(T x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
     assert(isFinite(Binary32.min_normal));
     assert(!isFinite(Binary32.nan));
     assert(!isFinite(Binary32.infinity));
+}
+
+///
+@safe pure nothrow @nogc unittest
+{
+    assert(isFinite(Binary64(1.23)));
+    assert(isFinite(Binary64.max));
+    assert(isFinite(Binary64.min_normal));
+    assert(!isFinite(Binary64.nan));
+    assert(!isFinite(Binary64.infinity));
 }
 
 ///
@@ -287,6 +405,18 @@ bool isIdentical(T)(T x, T y) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 }
 
 ///
+@safe pure nothrow @nogc unittest
+{
+    assert(isIdentical(Binary64.zero, Binary64.zero));
+    assert(isIdentical(Binary64(1.0), Binary64(1.0)));
+    assert(isIdentical(Binary64.infinity, Binary64.infinity));
+    assert(isIdentical(-Binary64.infinity, -Binary64.infinity));
+    assert(!isIdentical(Binary64.zero, -Binary64.zero));
+    assert(!isIdentical(Binary64.nan, -Binary64.nan));
+    assert(!isIdentical(Binary64.infinity, -Binary64.infinity));
+}
+
+///
 bool isInfinity(T)(T x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 {
     return x.exponent == T.max_exp + T.bias && !x.fraction;
@@ -305,6 +435,19 @@ bool isInfinity(T)(T x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 }
 
 ///
+@safe pure nothrow @nogc unittest
+{
+    assert(!isInfinity(Binary64.init));
+    assert(!isInfinity(-Binary64.init));
+    assert(!isInfinity(Binary64.nan));
+    assert(!isInfinity(-Binary64.nan));
+    assert(isInfinity(Binary64.infinity));
+    assert(isInfinity(-Binary64.infinity));
+    // FIXME:
+    // assert(isInfinity(-Binary64(1.0) / Binary64.zero));
+}
+
+///
 bool isNaN(T)(T x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 {
     return x.exponent == T.max_exp + T.bias && x.fraction;
@@ -319,6 +462,17 @@ bool isNaN(T)(T x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
     assert(isNaN(-Binary32.nan));
     assert(!isNaN(Binary32(53.6)));
     assert(!isNaN(Binary32(-53.6)));
+}
+
+///
+@safe pure nothrow @nogc unittest
+{
+    assert(isNaN(Binary64.init));
+    assert(isNaN(-Binary64.init));
+    assert(isNaN(Binary64.nan));
+    assert(isNaN(-Binary64.nan));
+    assert(!isNaN(Binary64(53.6)));
+    assert(!isNaN(Binary64(-53.6)));
 }
 
 ///
@@ -341,6 +495,23 @@ bool isNormal(T)(T x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
     assert(!isNormal(Binary32.infinity));
     assert(isNormal(-Binary32.max));
     assert(!isNormal(Binary32.min_normal / Binary32(4)));
+}
+
+///
+@safe pure nothrow @nogc unittest
+{
+    immutable f = Binary64(3);
+    immutable d = Binary64(500);
+    immutable e = Binary64(10e+35);
+    assert(isNormal(f));
+    assert(isNormal(d));
+    assert(isNormal(e));
+
+    assert(!isNormal(Binary64.zero));
+    assert(!isNormal(Binary64.infinity));
+    assert(isNormal(-Binary64.max));
+    // FIXME:
+    // assert(!isNormal(Binary64.min_normal / Binary64(4)));
 }
 
 ///
@@ -389,12 +560,47 @@ bool isPowerOf2(T)(T x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 }
 
 ///
+@safe pure nothrow @nogc unittest
+{
+    static import std.math;
+
+    assert(isPowerOf2(Binary64(1.0)));
+    assert(isPowerOf2(Binary64(2.0)));
+    assert(isPowerOf2(Binary64(0.5)));
+    assert(isPowerOf2(Binary64(std.math.pow(2.0L, 96))));
+    assert(isPowerOf2(Binary64(std.math.pow(2.0L, -77))));
+    assert(!isPowerOf2(Binary64(-2.0)));
+    assert(!isPowerOf2(Binary64(-0.5)));
+    assert(!isPowerOf2(Binary64.zero));
+    assert(!isPowerOf2(Binary64(4.315)));
+    // FIXME:
+    // assert(!isPowerOf2(Binary64(1.0) / Binary64(3.0)));
+
+    assert(!isPowerOf2(Binary64.nan));
+    assert(!isPowerOf2(Binary64.infinity));
+
+    // assert(isPowerOf2(Binary64.min_normal / Binary64(4.0)));
+    // assert(!isPowerOf2(Binary64.min_normal / Binary64(3.0)));
+}
+
+///
 bool isSubnormal(T)(T x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 {
     return !x.exponent && x.fraction;
 }
 
 ///
+@safe pure nothrow @nogc unittest
+{
+    for (auto f = Binary32(1.0); !isSubnormal(f); f /= Binary32(2))
+    {
+        assert(!isZero(f));
+    }
+}
+
+///
+// FIXME:
+version(None)
 @safe pure nothrow @nogc unittest
 {
     for (auto f = Binary32(1.0); !isSubnormal(f); f /= Binary32(2))
@@ -417,6 +623,16 @@ bool isZero(T)(T x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
     assert(!isZero(Binary32.infinity));
     assert(!isZero(Binary32.nan));
     assert(!isZero(Binary32(0.006)));
+}
+
+///
+@safe pure nothrow @nogc unittest
+{
+    assert(isZero(Binary64.zero));
+    assert(isZero(-Binary64.zero));
+    assert(!isZero(Binary64.infinity));
+    assert(!isZero(Binary64.nan));
+    assert(!isZero(Binary64(0.006)));
 }
 
 import std.traits : isIntegral;
@@ -453,6 +669,22 @@ U copysign(T, U)(T to, const(U) from) pure nothrow @nogc @safe
 }
 
 ///
+@safe pure nothrow @nogc unittest
+{
+    immutable one = Binary64(1.0);
+
+    assert(copysign(one, one) == one);
+    assert(copysign(one, -Binary64.zero) == -one);
+    assert(copysign(1UL, -one) == -one);
+    assert(copysign(-one, -one) == -one);
+
+    assert(copysign(Binary64.infinity, -one) == -Binary64.infinity);
+    assert(isIdentical(copysign(Binary64.nan, one), Binary64.nan));
+    assert(isIdentical(copysign(-Binary64.nan, one), Binary64.nan));
+    assert(isIdentical(copysign(Binary64.nan, -one), -Binary64.nan));
+}
+
+///
 T sgn(T)(const(T) x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 {
     immutable one = T(1.0);
@@ -466,6 +698,15 @@ T sgn(T)(const(T) x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
     assert(sgn(Binary32(-168.1234)) == Binary32(-1.0));
     assert(sgn(Binary32.zero) == Binary32.zero);
     assert(sgn(-Binary32.zero) == -Binary32.zero);
+}
+
+///
+@safe pure nothrow @nogc unittest
+{
+    assert(sgn(Binary64(168.1234)) == Binary64(1.0));
+    assert(sgn(Binary64(-168.1234)) == Binary64(-1.0));
+    assert(sgn(Binary64.zero) == Binary64.zero);
+    assert(sgn(-Binary64.zero) == -Binary64.zero);
 }
 
 ///
@@ -485,4 +726,17 @@ int signbit(T)(T x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
     assert(signbit(-Binary32.zero));
     assert(signbit(-Binary32.max));
     assert(!signbit(Binary32.max));
+}
+
+///
+@safe pure nothrow @nogc unittest
+{
+    assert(!signbit(Binary64.nan));
+    assert(signbit(-Binary64.nan));
+    assert(!signbit(Binary64(168.1234)));
+    assert(signbit(Binary64(-168.1234)));
+    assert(!signbit(Binary64.zero));
+    assert(signbit(-Binary64.zero));
+    assert(signbit(-Binary64.max));
+    assert(!signbit(Binary64.max));
 }
