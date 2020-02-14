@@ -2,7 +2,8 @@ module ieee754.core;
 
 import ieee754.type, ieee754.math;
 
-package Binary32 add(Binary32 lhs, Binary32 rhs) pure nothrow @nogc @safe
+package T add(T)(const(T) lhs, const(T) rhs) pure nothrow @nogc @safe
+        if (isIEEE754Binary!T)
 in(isFinite(lhs))
 in(isFinite(rhs))
 {
@@ -11,8 +12,8 @@ in(isFinite(rhs))
     immutable larger = cmpResult > 0 ? lhs : rhs;
     immutable smaller = isIdentical(larger, lhs) ? rhs : lhs;
 
-    immutable larger2 = Fixed!Binary32(larger);
-    auto smaller2 = Fixed!Binary32(smaller);
+    immutable larger2 = Fixed!T(larger);
+    auto smaller2 = Fixed!T(smaller);
 
     // preliminary shift
     if (smaller2.mantissa == 0)
@@ -53,7 +54,7 @@ in(isFinite(rhs))
         }
     }();
 
-    return round(Fixed!Binary32(sumSign, sumExponent, sumMantissa));
+    return round(Fixed!T(sumSign, sumExponent, sumMantissa));
 }
 
 package Binary32 mul(Binary32 lhs, Binary32 rhs) pure nothrow @nogc @safe
@@ -209,7 +210,7 @@ package struct Fixed(Float)
 
     bool overflow() const pure nothrow @nogc @safe @property
     {
-        return exponentBiased > 0xFE;
+        return exponentUnbiased >= Float.max_exp;
     }
 
     bool underflow() const pure nothrow @nogc @safe @property
@@ -276,7 +277,7 @@ package Float round(Float)(Fixed!Float r) pure nothrow @nogc @safe @property
         return r.sign ? -Float.infinity : Float.infinity;
     }
 
-    assert(r.exponentBiased < 0xFF);
+    assert(r.exponentUnbiased < Float.max_exp);
     assert(r.exponentBiased > 0);
 
     return Float(r.sign, r.underflow ? 0 : cast(ExpType) r.exponentBiased, r.fractionPart >>> 3);

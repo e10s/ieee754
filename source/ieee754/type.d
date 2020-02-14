@@ -238,6 +238,34 @@ struct IEEE754Binary(uint floatBits) if (floatBits == 32 || floatBits == 64)
     }
 
     ///
+    @safe pure nothrow @nogc unittest
+    {
+        import ieee754.math : isIdentical, isNaN;
+
+        assert(isIdentical(Binary64(-1.0) + Binary64(1.0), Binary64.zero));
+
+        assert(isNaN(Binary64.nan + Binary64(1.0)));
+        assert(isNaN(Binary64(1.0) - Binary64.nan));
+        assert(isNaN(Binary64.infinity - Binary64.infinity));
+        assert(Binary64.infinity + Binary64.infinity == Binary64.infinity);
+        assert(Binary64.infinity - Binary64(1.0) == Binary64.infinity);
+        assert(Binary64(1.0) - Binary64.infinity == -Binary64.infinity);
+
+        assert(isIdentical(Binary64.zero + Binary64.zero, Binary64.zero));
+        assert(isIdentical(Binary64.zero - Binary64.zero, Binary64.zero));
+        assert(isIdentical(-Binary64.zero + Binary64.zero, Binary64.zero));
+        assert(isIdentical(-Binary64.zero - Binary64.zero, -Binary64.zero));
+
+        assert(Binary64(1.0) - Binary64.zero == Binary64(1.0));
+        assert(Binary64.zero - Binary64(1.0) == Binary64(-1.0));
+
+        assert(Binary64(7.0) + Binary64(3.0) == Binary64(7.0 + 3.0));
+
+        assert(Binary64(float.min_normal / 2) + Binary64(
+                float.min_normal / 8) == Binary64(float.min_normal / 2 + float.min_normal / 8));
+    }
+
+    ///
     @safe nothrow @nogc unittest
     {
         import ieee754.math : isIdentical;
@@ -249,6 +277,20 @@ struct IEEE754Binary(uint floatBits) if (floatBits == 32 || floatBits == 64)
         assert(isIdentical(Binary32(-1.0) + Binary32(1.0), -Binary32.zero));
         assert(isIdentical(Binary32.zero - Binary32.zero, -Binary32.zero));
         assert(isIdentical(-Binary32.zero + Binary32.zero, -Binary32.zero));
+    }
+
+    ///
+    @safe nothrow @nogc unittest
+    {
+        import ieee754.math : isIdentical;
+        import std.math : FloatingPointControl;
+
+        pragma(inline, false);
+        FloatingPointControl fpctrl;
+        fpctrl.rounding = FloatingPointControl.roundDown;
+        assert(isIdentical(Binary64(-1.0) + Binary64(1.0), -Binary64.zero));
+        assert(isIdentical(Binary64.zero - Binary64.zero, -Binary64.zero));
+        assert(isIdentical(-Binary64.zero + Binary64.zero, -Binary64.zero));
     }
 
     ///
