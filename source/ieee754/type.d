@@ -355,6 +355,34 @@ struct IEEE754Binary(uint floatBits) if (floatBits == 32 || floatBits == 64)
     }
 
     ///
+    @safe pure nothrow @nogc unittest
+    {
+        import ieee754.math : isIdentical, isNaN;
+
+        assert(isNaN(Binary64.nan * Binary64(1.0)));
+        assert(isNaN(Binary64(1.0) * Binary64.nan));
+
+        assert(isNaN(Binary64.infinity * Binary64.zero));
+
+        assert(Binary64.infinity * -Binary64.infinity == -Binary64.infinity);
+
+        assert(isIdentical(Binary64.zero * Binary64(-1.0), -Binary64.zero));
+
+        assert(Binary64(3.14) * Binary64(-1.0) == -Binary64(3.14));
+        assert(Binary64(3.14) * Binary64(2.72) == Binary64(3.14 * 2.72));
+        assert(Binary64(double.min_normal / 4) * Binary64(-1.0) == -Binary64(double.min_normal / 4));
+
+        // overflow
+        assert(Binary64(2.0) * Binary64.max == Binary64.infinity);
+
+        // underflow
+        assert(isIdentical(Binary64(double.min_normal) * -Binary64(double.min_normal / 2),
+                -Binary64.zero));
+
+        assert(Binary64(0x1.46f6d8p+125) * Binary64(0x1.90e02ap+2) == Binary64(0x1.ffffff217f7p+127));
+    }
+
+    ///
     IEEE754Binary opBinary(string op)(IEEE754Binary rhs) const pure nothrow @nogc @safe
             if (op == "/")
     {

@@ -76,6 +76,57 @@ in(isFinite(rhs))
     return round(Fixed!Binary32(prodSign, prodExponent, prodMantissa));
 }
 
+import std.typecons : Tuple;
+
+private alias Ucent = Tuple!(ulong, "low", ulong, "high");
+
+private Ucent mul128(ulong a, ulong b) pure nothrow @nogc @safe
+{
+    auto hi32(ulong x)
+    {
+        return x >>> 32;
+    }
+
+    auto lo32(ulong x)
+    {
+        return x & 0xFFFF_FFFFUL;
+    }
+
+    immutable tmpHi = hi32(a) * hi32(b);
+    immutable tmpMid = hi32(a) * lo32(b) + lo32(a) * hi32(b);
+    immutable tmpLo = lo32(a) * lo32(b);
+
+    immutable prodLo = lo32(tmpLo);
+    immutable tmpProdMidLo = hi32(tmpLo) + lo32(tmpMid);
+    immutable prodMidLo = lo32(tmpProdMidLo);
+
+    immutable lowProduct = (prodMidLo << 32) | prodLo;
+
+    immutable carryProdMidLo = hi32(tmpProdMidLo);
+    immutable prodMidHi = hi32(tmpMid);
+    immutable highProduct = tmpHi + prodMidHi + carryProdMidLo;
+
+    return Ucent(lowProduct, highProduct);
+}
+
+package Binary64 mul(Binary64 lhs, Binary64 rhs) pure nothrow @nogc @safe
+in(isFinite(lhs))
+in(isFinite(rhs))
+{
+    immutable lhs2 = Fixed!Binary64(lhs);
+    immutable rhs2 = Fixed!Binary64(rhs);
+
+    immutable prodSign = lhs2.sign ^ rhs2.sign;
+    immutable prodExponent = lhs2.exponentUnbiased + rhs2.exponentUnbiased;
+
+    immutable prod = mul128(lhs2.mantissa, rhs2.mantissa);
+    enum extraMask = (1UL << 55) - 1;
+    immutable stickyBit = cast(bool)(prod.low & extraMask);
+    immutable prodMantissa = (prod.high << 9) | (prod.low >>> 55) | stickyBit;
+
+    return round(Fixed!Binary64(prodSign, prodExponent, prodMantissa));
+}
+
 package Binary32 div(Binary32 lhs, Binary32 rhs) pure nothrow @nogc @safe
 in(isFinite(lhs))
 in(isFinite(rhs))

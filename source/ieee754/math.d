@@ -105,7 +105,7 @@ T sqrt(T)(const(T) x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 
 ///
 // FIXME:
-version(None)
+version (None)
 @safe pure nothrow @nogc unittest
 {
     static import std.math;
@@ -264,8 +264,6 @@ pure nothrow @nogc @safe unittest
 }
 
 ///
-// FIXME:
-version(None)
 pure nothrow @nogc @safe unittest
 {
     assert(isNaN(nextDown(Binary64.init)));
@@ -303,8 +301,6 @@ pure nothrow @nogc @safe unittest
 }
 
 ///
-// FIXME:
-version(None)
 pure nothrow @nogc @safe unittest
 {
     assert(isNaN(nextUp(Binary64.init)));
@@ -348,8 +344,6 @@ pure nothrow @nogc @safe unittest
 }
 
 ///
-// FIXME:
-version(None)
 pure nothrow @nogc @safe unittest
 {
     assert(isNaN(ulp(Binary32.nan)));
@@ -600,8 +594,7 @@ bool isSubnormal(T)(T x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 
 ///
 // FIXME:
-version(None)
-@safe pure nothrow @nogc unittest
+version (None) @safe pure nothrow @nogc unittest
 {
     for (auto f = Binary32(1.0); !isSubnormal(f); f /= Binary32(2))
     {
