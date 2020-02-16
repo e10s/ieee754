@@ -76,9 +76,29 @@ in(isFinite(rhs))
     return round(Fixed!Binary32(prodSign, prodExponent, prodMantissa));
 }
 
-import std.typecons : Tuple;
+private struct Ucent
+{
+    ulong high, low;
+    this(ulong high, ulong low) pure nothrow @nogc @safe
+    {
+        this.high = high;
+        this.low = low;
+    }
 
-private alias Ucent = Tuple!(ulong, "low", ulong, "high");
+    int opCmp(Ucent x) const pure nothrow @nogc @safe
+    {
+        immutable t = (high > x.high) - (high < x.high);
+        return t ? t : (low > x.low) - (low < x.low);
+    }
+
+    pure nothrow @nogc @safe unittest
+    {
+        assert(Ucent(4, 2) < Ucent(11, 9));
+        assert(Ucent(4, 2) < Ucent(4, 9));
+        assert(Ucent(50, 2) > Ucent(4, 9));
+        assert(Ucent(50, 2) == Ucent(50, 2));
+    }
+}
 
 private Ucent mul128(ulong a, ulong b) pure nothrow @nogc @safe
 {
@@ -106,7 +126,7 @@ private Ucent mul128(ulong a, ulong b) pure nothrow @nogc @safe
     immutable prodMidHi = hi32(tmpMid);
     immutable highProduct = tmpHi + prodMidHi + carryProdMidLo;
 
-    return Ucent(lowProduct, highProduct);
+    return Ucent(highProduct, lowProduct);
 }
 
 package Binary64 mul(Binary64 lhs, Binary64 rhs) pure nothrow @nogc @safe
@@ -147,6 +167,44 @@ in(isFinite(rhs))
     assert(quotMantissa >>> (Fixed!Binary32.fractionBits - 1));
 
     return round(Fixed!Binary32(quotSign, quotExponent, quotMantissa));
+}
+
+package Binary64 div(Binary64 lhs, Binary64 rhs) pure nothrow @nogc @safe
+in(isFinite(lhs))
+in(isFinite(rhs))
+{
+    immutable lhs2 = Fixed!Binary64(lhs);
+    immutable rhs2 = Fixed!Binary64(rhs);
+
+    immutable quotSign = lhs2.sign ^ rhs2.sign;
+    immutable quotExponent = lhs2.exponentUnbiased - rhs2.exponentUnbiased;
+    immutable dividend = mul128(lhs2.mantissa,
+            Fixed!Binary64.MantType(1) << Fixed!Binary64.fractionBits);
+
+    ulong q;
+    Ucent prod;
+    foreach_reverse (i; 0 .. Fixed!Binary64.fractionBits + 1)
+    {
+        immutable bit = Fixed!Binary64.MantType(1) << i;
+        immutable newQ = q | bit;
+        prod = mul128(newQ, rhs2.mantissa);
+
+        if (dividend == prod)
+        {
+            q = newQ;
+            break;
+        }
+        if (dividend > prod)
+        {
+            q = newQ;
+        }
+    }
+
+    immutable stickyBit = dividend != prod;
+    immutable quotMantissa = q | stickyBit;
+    assert(quotMantissa >>> (Fixed!Binary64.fractionBits - 1));
+
+    return round(Fixed!Binary64(quotSign, quotExponent, quotMantissa));
 }
 
 package struct Fixed(Float)

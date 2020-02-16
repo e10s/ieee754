@@ -437,12 +437,39 @@ struct IEEE754Binary(uint floatBits) if (floatBits == 32 || floatBits == 64)
 
         assert(isIdentical(Binary32(2.0) / -Binary32.infinity, -Binary32.zero));
         assert(Binary32(5.0) / Binary32(3.0) == Binary32(5.0f / 3.0f));
+        assert(Binary32(5.123) / Binary32(90.48831) == Binary32(5.123f / 90.48831f));
+        assert(Binary32(900) / Binary32(90) == Binary32(10.0));
 
         // overflow
         assert(Binary32.max / Binary32(float.min_normal / 6) == Binary32.infinity);
 
         // underflow
         assert(isIdentical(Binary32(float.min_normal / 6) / -Binary32.max, -Binary32.zero));
+    }
+
+    ///
+    @safe pure nothrow @nogc unittest
+    {
+        import ieee754.math : isIdentical, isNaN;
+
+        assert(isNaN(Binary64.nan / Binary64(2.0)));
+        assert(isNaN(Binary64(2.0) / Binary64.nan));
+
+        assert(isNaN(Binary64.zero / Binary64.zero));
+        assert(isNaN(Binary64.infinity / Binary64.infinity));
+        assert(Binary64.infinity / Binary64(1.0) == Binary64.infinity);
+        assert(Binary64.infinity / -Binary64.zero == -Binary64.infinity);
+
+        assert(isIdentical(Binary64(2.0) / -Binary64.infinity, -Binary64.zero));
+        assert(Binary64(5.0) / Binary64(3.0) == Binary64(5.0 / 3.0));
+        assert(Binary64(5.123) / Binary64(90.48831) == Binary64(5.123 / 90.48831));
+        assert(Binary64(900) / Binary64(90) == Binary64(10.0));
+
+        // overflow
+        assert(Binary64.max / Binary64(double.min_normal / 6) == Binary64.infinity);
+
+        // underflow
+        assert(isIdentical(Binary64(double.min_normal / 6) / -Binary64.max, -Binary64.zero));
     }
 
     ///

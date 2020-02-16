@@ -437,8 +437,7 @@ bool isInfinity(T)(T x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
     assert(!isInfinity(-Binary64.nan));
     assert(isInfinity(Binary64.infinity));
     assert(isInfinity(-Binary64.infinity));
-    // FIXME:
-    // assert(isInfinity(-Binary64(1.0) / Binary64.zero));
+    assert(isInfinity(-Binary64(1.0) / Binary64.zero));
 }
 
 ///
@@ -504,8 +503,7 @@ bool isNormal(T)(T x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
     assert(!isNormal(Binary64.zero));
     assert(!isNormal(Binary64.infinity));
     assert(isNormal(-Binary64.max));
-    // FIXME:
-    // assert(!isNormal(Binary64.min_normal / Binary64(4)));
+    assert(!isNormal(Binary64.min_normal / Binary64(4)));
 }
 
 ///
@@ -567,14 +565,13 @@ bool isPowerOf2(T)(T x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
     assert(!isPowerOf2(Binary64(-0.5)));
     assert(!isPowerOf2(Binary64.zero));
     assert(!isPowerOf2(Binary64(4.315)));
-    // FIXME:
-    // assert(!isPowerOf2(Binary64(1.0) / Binary64(3.0)));
+    assert(!isPowerOf2(Binary64(1.0) / Binary64(3.0)));
 
     assert(!isPowerOf2(Binary64.nan));
     assert(!isPowerOf2(Binary64.infinity));
 
-    // assert(isPowerOf2(Binary64.min_normal / Binary64(4.0)));
-    // assert(!isPowerOf2(Binary64.min_normal / Binary64(3.0)));
+    assert(isPowerOf2(Binary64.min_normal / Binary64(4.0)));
+    assert(!isPowerOf2(Binary64.min_normal / Binary64(3.0)));
 }
 
 ///
@@ -593,8 +590,7 @@ bool isSubnormal(T)(T x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 }
 
 ///
-// FIXME:
-version (None) @safe pure nothrow @nogc unittest
+@safe pure nothrow @nogc unittest
 {
     for (auto f = Binary32(1.0); !isSubnormal(f); f /= Binary32(2))
     {
