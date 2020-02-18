@@ -85,6 +85,33 @@ private struct Ucent
         this.low = low;
     }
 
+    Ucent opBinary(string op)(size_t shift) const pure nothrow @nogc @safe
+            if (op == ">>" || op == ">>>")
+    {
+        if (shift >= 128)
+        {
+            return Ucent(0UL, 0UL);
+        }
+
+        if (shift < 64)
+        {
+            immutable newHigh = high >>> shift;
+            immutable toLow = (high - (newHigh << shift)) << (64 - cast(int) shift);
+            return Ucent(newHigh, toLow | (low >>> shift));
+        }
+        else
+        {
+            return Ucent(0UL, high >>> (shift - 64));
+        }
+    }
+
+    pure nothrow @nogc @safe unittest
+    {
+        assert(Ucent(9, 16) >> 3 == Ucent(1, (1UL << 61) + 2));
+        assert(Ucent(9, 16) >> 65 == Ucent(0, 4));
+        assert(Ucent(9, 16) >> 300 == Ucent(0, 0));
+    }
+
     int opCmp(Ucent x) const pure nothrow @nogc @safe
     {
         immutable t = (high > x.high) - (high < x.high);
@@ -100,7 +127,7 @@ private struct Ucent
     }
 }
 
-private Ucent mul128(ulong a, ulong b) pure nothrow @nogc @safe
+package Ucent mul128(ulong a, ulong b) pure nothrow @nogc @safe
 {
     auto hi32(ulong x)
     {

@@ -53,16 +53,40 @@ T sqrt(T)(const(T) x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
     immutable sqrtExponent = x2.exponentUnbiased / 2;
 
     // [padding][integer: 2].[fraction: fractionBits][margin: fractionBits]
-    immutable operandMantissa = cast(ulong) x2.mantissa << Fixed!T.fractionBits;
+    static if (is(T == Binary32))
+    {
+        immutable operandMantissa = cast(ulong) x2.mantissa << Fixed!T.fractionBits;
+    }
+    else static if (is(T == Binary64))
+    {
+        import ieee754.core : mul128;
 
+        immutable operandMantissa = mul128(x2.mantissa,
+                Fixed!T.MantType(1) << Fixed!T.fractionBits);
+    }
+    else
+    {
+        static assert(0);
+    }
     // [padding][integer: 1].[fraction: fractionBits]
-    uint sqrtMantissa;
+    Fixed!T.MantType sqrtMantissa;
 
-    uint tempAdd, tempMulSub;
+    Fixed!T.MantType tempAdd, tempMulSub;
 
     foreach_reverse (i; 1 .. Fixed!T.fractionBits + 1)
     {
-        immutable twoBits = (operandMantissa >>> (i * 2)) & 0b11;
+        static if (is(T == Binary32))
+        {
+            immutable twoBits = (operandMantissa >>> (i * 2)) & 0b11;
+        }
+        else static if (is(T == Binary64))
+        {
+            immutable twoBits = (operandMantissa >>> (i * 2)).low & 0b11;
+        }
+        else
+        {
+            static assert(0);
+        }
         tempMulSub <<= 2;
         tempMulSub |= twoBits;
 
@@ -104,16 +128,14 @@ T sqrt(T)(const(T) x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
 }
 
 ///
-// FIXME:
-version (None)
 @safe pure nothrow @nogc unittest
 {
     static import std.math;
 
-    assert(sqrt(Binary64(2.0)) == Binary64(std.math.sqrt(2.0f)));
-    assert(sqrt(Binary64(9.0)) == Binary64(std.math.sqrt(9.0f)));
+    assert(sqrt(Binary64(2.0)) == Binary64(std.math.sqrt(2.0)));
+    assert(sqrt(Binary64(9.0)) == Binary64(std.math.sqrt(9.0)));
 
-    assert(isNaN(sqrt(Binary64(-1.0f))));
+    assert(isNaN(sqrt(Binary64(-1.0))));
 
     assert(sqrt(-Binary64.zero) == -Binary64.zero);
 
