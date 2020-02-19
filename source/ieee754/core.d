@@ -76,7 +76,7 @@ in(isFinite(rhs))
     return round(Fixed!Binary32(prodSign, prodExponent, prodMantissa));
 }
 
-private struct Ucent
+package struct Ucent
 {
     ulong high, low;
     this(ulong high, ulong low) pure nothrow @nogc @safe
@@ -110,6 +110,32 @@ private struct Ucent
         assert(Ucent(9, 16) >> 3 == Ucent(1, (1UL << 61) + 2));
         assert(Ucent(9, 16) >> 65 == Ucent(0, 4));
         assert(Ucent(9, 16) >> 300 == Ucent(0, 0));
+    }
+
+    Ucent opBinary(string op)(size_t shift) const pure nothrow @nogc @safe
+            if (op == "<<")
+    {
+        if (shift >= 128)
+        {
+            return Ucent(0UL, 0UL);
+        }
+
+        if (shift < 64)
+        {
+            immutable toHigh = low >>> (64 - shift);
+            return Ucent((high << shift) | toHigh, low << shift);
+        }
+        else
+        {
+            return Ucent(low << (shift - 64), 0UL);
+        }
+    }
+
+    pure nothrow @nogc @safe unittest
+    {
+        assert(Ucent(9, 16) << 3 == Ucent(72, 128));
+        assert(Ucent(9, 16) << 65 == Ucent(32, 0));
+        assert(Ucent(9, 16) << 300 == Ucent(0, 0));
     }
 
     int opCmp(Ucent x) const pure nothrow @nogc @safe
@@ -205,8 +231,7 @@ in(isFinite(rhs))
 
     immutable quotSign = lhs2.sign ^ rhs2.sign;
     immutable quotExponent = lhs2.exponentUnbiased - rhs2.exponentUnbiased;
-    immutable dividend = mul128(lhs2.mantissa,
-            Fixed!Binary64.MantType(1) << Fixed!Binary64.fractionBits);
+    immutable dividend = Ucent(0, lhs2.mantissa) << Fixed!Binary64.fractionBits;
 
     ulong q;
     Ucent prod;

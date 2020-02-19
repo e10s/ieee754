@@ -59,10 +59,9 @@ T sqrt(T)(const(T) x) pure nothrow @nogc @safe if (isIEEE754Binary!T)
     }
     else static if (is(T == Binary64))
     {
-        import ieee754.core : mul128;
+        import ieee754.core : Ucent;
 
-        immutable operandMantissa = mul128(x2.mantissa,
-                Fixed!T.MantType(1) << Fixed!T.fractionBits);
+        immutable operandMantissa = Ucent(0, x2.mantissa) << Fixed!T.fractionBits;
     }
     else
     {
